@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- net8.0 is LTS and Visual Studio 2022 opens it without further ado. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PalSign</RootNamespace>
+    <AssemblyName>PAL-sign</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- The eight EBU colour bars the board itself draws (CardPreview.cs's
+         own Bars[]), see tools that made app.ico; not decoration borrowed
+         from elsewhere. -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- Warnings as errors: this is the second implementation of the
+         image conversion, so sloppiness must not slip through here. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Since .NET Core, SerialPort is no longer part of the base. -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <!-- System.Drawing for reading and displaying images. -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>

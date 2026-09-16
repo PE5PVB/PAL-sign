@@ -1,0 +1,65 @@
+; PCM1808 experiment: a system clock for the ADC (it has no crystal of
+; its own) and an I2S receiver. Both run on pio1, entirely separate
+; from pio0's bt656_out program.
+
+; scki_clock: a free-running square wave on the side-set pin. Two
+; instructions, each one cycle, so the output toggles every cycle and
+; the frequency is half the state machine's own clock -- see PCM_CLKDIV
+; in pcm1808.cpp for why that clock is not an exact multiple of SCKI
+; and what that costs.
+.program scki_clock
+.side_set 1
+.wrap_target
+    nop            side 0
+    nop            side 1
+.wrap
+
+; i2s_rx: PCM1808 in master mode drives BCK and LRCK, this only
+; listens. One 32 bit word per channel comes out, so the CPU never
+; handles individual bits: an earlier version pushed raw (LRCK, DOUT)
+; pairs on every BCK edge and framed them in software, which at
+; 3.072 MHz cost more than the whole video row budget.
+;
+; Frame layout, master mode, I2S format (datasheet: 64 BCK per frame,
+; LRCK low = left, DOUT changes on the BCK falling edge, and the MSB
+; follows the LRCK edge by one BCK). Per channel that is 32 BCK: one
+; delay bit, 24 data bits, 7 padding bits -- and the channel's own
+; last padding bit lands on the BCK edge coincident with the next LRCK
+; transition, so it is skipped here as the delay bit of the channel
+; that follows. Each half therefore captures 31 bits (data in bits
+; 31..8 of the word once shifted in MSB first) and finishes with a
+; channel flag in bit 0: 0 = left, 1 = right. The flag makes every
+; word self-describing, so a lost word can never swap the channels.
+;
+; Resynchronised on both LRCK edges every frame: the "wait 1" before
+; each "wait 0" (and vice versa) is satisfied at once when the timing
+; is right, and blocks until the next frame if it is not.
+;
+; "wait gpio" takes absolute pin numbers (9 = BCK, 10 = LRCK) and
+; cannot be relocated through a pin mapping; pcm1808.cpp static_asserts
+; them. "in pins, 1" reads the IN base pin, set to DOUT at init.
+.program i2s_rx
+    set y, 1                ; the right-channel flag, shifted in below
+.wrap_target
+    wait 1 gpio 10
+    wait 0 gpio 10          ; LRCK falling edge: left starts
+    wait 0 gpio 9
+    wait 1 gpio 9           ; first BCK rising edge: previous channel's last pad bit, skip
+    set x, 30
+lbit:
+    wait 0 gpio 9
+    wait 1 gpio 9
+    in pins, 1
+    jmp x-- lbit            ; 31 bits: 24 data, 7 padding
+    in null, 1              ; flag 0 = left, autopush at 32
+    wait 1 gpio 10          ; LRCK rising edge: right starts
+    wait 0 gpio 9
+    wait 1 gpio 9           ; left's last pad bit, skip
+    set x, 30
+rbit:
+    wait 0 gpio 9
+    wait 1 gpio 9
+    in pins, 1
+    jmp x-- rbit
+    in y, 1                 ; flag 1 = right, autopush at 32
+.wrap

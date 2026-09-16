@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Renders Doto for Picdream's first line and the ticker's second face.
+
+The original choice for this "square dot matrix" face was
+Square-Dot-Matrix.ttf (Krafti Lab / Onur Cem Tan), a "Free for Personal
+Use" face -- not redistributable through this project's public
+repository. Replaced with Doto (SIL OFL 1.1, https://github.com/
+oliverlalan/Doto), a variable font whose Roundness axis runs from
+square dots (0, its own default) to fully round (100); its default
+instance, at Weight 900, is a close visual match for the original at
+the sizes used here. Two faces out of one run: Picdream's own box at
+66 rows with no ring, and a second at 60 rows -- the SAME cap target
+Inter's own ticker face uses, since two different faces at one target
+still measure different actual ink -- WITH a ring, for the ticker's
+transparent mode.
+
+KEPT AS ITS OWN SCRIPT rather than importing build_into() and calling
+it with a different FONT_FILE: that function reads FONT_FILE as a
+module global, so reusing it here would mean mutating another script's
+global to borrow it. ring_of() and RING ARE imported from there,
+though -- ring_of() takes no such global, and the ticker's ring has to
+match make_contest_font.py's own margins exactly (ticker.cpp's
+EDGE_TOTAL static_assert leans on it), so copying it instead of
+importing would risk the two drifting apart.
+
+Picdream's own box (picdream_font.h) is written here, self-contained.
+The ticker face is built by build_into() below but WRITTEN by
+make_ticker_font.py, which also builds Inter's ticker face and puts
+both in one shared src/ticker_font.h.
+
+Run from the tools directory; Doto.ttf sits next to this script.
+"""
+
+from PIL import Image, ImageDraw, ImageFont
+
+from contest_rle import emit_rle
+from make_contest_font import RING, ring_of
+
+# Byte for byte the CHARS of make_fonts.py / make_contest_font.py's own
+# CHARSET, so every character that can be typed exists in this face too.
+CHARSET = " !\"&'()+,-./0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZ_Ø"
+FONT_FILE = "Doto.ttf"
+
+CANVAS = (500, 400)
+ORIGIN = (100, 300)
+
+
+def ink_box(font, ch):
+    img = Image.new("L", CANVAS, 0)
+    ImageDraw.Draw(img).text(ORIGIN, ch, font=font, fill=255, anchor="ls")
+    return img, img.getbbox()
+
+
+def caps_band(size):
+    """Top and bottom of the flat capitals, measured on the H."""
+    font = ImageFont.truetype(FONT_FILE, size)
+    _, b = ink_box(font, "H")
+    return b[1], b[3]
+
+
+def build_into(f, cap_target, prefix, struct, rings):
+    """The CAP/TOP/BOTTOM constants, the glyph tokens and the struct
+    table for one face, written into an already open file. Split out of
+    build() below so make_ticker_font.py can write the shared preamble
+    of src/ticker_font.h once and call this once per face."""
+    size = cap_target
+    while True:
+        y0, y1 = caps_band(size + 1)
+        if y1 - y0 > cap_target:
+            break
+        size += 1
+    font = ImageFont.truetype(FONT_FILE, size)
+    cap_top, cap_bot = caps_band(size)
+    print(f"{prefix}: point size {size}, capitals {cap_bot - cap_top} rows "
+          f"(target {cap_target})")
+
+    glyphs = []
+    for ch in CHARSET:
+        adv = max(1, round(font.getlength(ch)))
+        if ch == " ":
+            glyphs.append((ch, 0, 0, 0, 0, adv, b""))
+            continue
+        img, b = ink_box(font, ch)
+        crop = img.crop(b)
+        lsb = b[0] - ORIGIN[0]
+        yoff = b[1] - cap_top
+        glyphs.append((ch, crop.width, crop.height, yoff, lsb, adv, crop.tobytes()))
+
+    f.write(f"static const int {prefix}_CAP = {cap_bot - cap_top};\n")
+    top = min(y for _, _, h, y, _, _, _ in glyphs if h)
+    bot = max(y + h for _, _, h, y, _, _, _ in glyphs if h)
+    f.write(f"static const int {prefix}_TOP = {top};\n")
+    f.write(f"static const int {prefix}_BOTTOM = {bot};\n\n")
+    total = 0
+    for i, (ch, w, h, yoff, lsb, adv, data) in enumerate(glyphs):
+        if not data:
+            continue
+        total += emit_rle(f, f"{prefix}_{i}", data, w, h)
+        if rings:
+            total += emit_rle(f, f"{prefix}_{i}_RING",
+                              ring_of(data, w, h), w + 2 * RING, h + 2 * RING)
+    f.write(f"\nstatic const {struct} {prefix}[{len(glyphs)}] = {{\n")
+    for i, (ch, w, h, yoff, lsb, adv, data) in enumerate(glyphs):
+        code = 0x01 if ch == "Ø" else ord(ch)
+        off = f"{prefix}_{i}_O" if data else "nullptr"
+        rle = f"{prefix}_{i}_R" if data else "nullptr"
+        line = f"    {{{code}, {w}, {h}, {yoff}, {lsb}, {adv}, {off}, {rle}"
+        if rings:
+            roff = f"{prefix}_{i}_RING_O" if data else "nullptr"
+            rrle = f"{prefix}_{i}_RING_R" if data else "nullptr"
+            line += f", {roff}, {rrle}"
+        f.write(line + "},\n")
+    f.write("};\n")
+    print(f"  band {top}..{bot}, {total} bytes of tokens")
+
+
+def build(cap_target, out, prefix, struct, rings, whom, glyph_h):
+    with open(out, "w", newline="\n") as f:
+        f.write("// Generated by tools/make_picdream_font.py -- do not edit.\n")
+        f.write(f"// Doto (SIL OFL 1.1) for {whom}, as runs, rendered at the\n")
+        f.write("// final size so the firmware never scales it. See\n")
+        f.write("// tools/contest_rle.py for the run form and the generator\n")
+        f.write("// for what yoff, lsb and adv mean.\n")
+        f.write("#pragma once\n#include <stdint.h>\n\n")
+        f.write(f'#include "{glyph_h}"\n\n')
+        build_into(f, cap_target, prefix, struct, rings)
+    print(f"  -> {out}")
+
+
+def main():
+    # 90 (the contest page's own cap height) measures too wide for the
+    # box picdream.cpp actually has for it: at that size PE5PVB/PA0XYZ
+    # come out ~462 samples, against a 360 sample box (the end of the
+    # yellow bar to the start of the blue one). 66 is measured, not
+    # guessed: at point size 94 PE5PVB and PA0XYZ come out 342 samples,
+    # inside the box with about 9 samples of air on either side; PI4RAZ,
+    # shorter, comes out narrower still.
+    build(66, "../src/testcards/picdream_font.h", "PICDREAM_FONT", "ContestGlyph",
+          rings=False, whom="the Picdream card", glyph_h="../runglyph.h")
+    # The ticker face (TICKER_FONT_SQUARE) is no longer built here: it
+    # shares src/ticker_font.h with the Inter face, see
+    # make_ticker_font.py.
+
+
+if __name__ == "__main__":
+    main()

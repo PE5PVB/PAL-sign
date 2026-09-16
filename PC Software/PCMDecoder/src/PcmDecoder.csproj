@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WinExe: no console window behind the form; the self test attaches
+         to the console it was started from (Program.cs). -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- DeckLinkAPI64.dll is 64 bit only; AnyCPU would fail to load it. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PcmDecoder</RootNamespace>
+    <AssemblyName>PcmDecoder</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- PreviewForm.cs writes into a locked Bitmap by pointer. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The PC tool's own icon: one family, one icon. -->
+    <ApplicationIcon>..\..\Configurator\src\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The PC tool's colours and button styling, shared rather than
+         copied, so the two windows cannot drift apart. -->
+    <Compile Include="..\..\Configurator\src\Theme.cs" Link="Theme.cs" />
+    <Compile Include="..\..\Configurator\src\AboutDialog.cs" Link="AboutDialog.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- Generic capture devices (DirectShowCapture.cs): the classic
+         DirectShowLib interop, published for .NET Standard. -->
+    <PackageReference Include="DirectShowLib.Standard" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Generated from the DeckLinkAPI64.dll shipped with the Blackmagic
+         Desktop Video driver (its type library, not a separately
+         downloaded SDK); MSBuild regenerates the interop assembly from
+         whatever copy of that DLL is registered on the build machine, see
+         notes/pc-tool.md. -->
+    <COMReference Include="DeckLinkAPI">
+      <Guid>d864517a-edd5-466d-867d-c819f1c052bb</Guid>
+      <VersionMajor>1</VersionMajor>
+      <VersionMinor>0</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>tlbimp</WrapperTool>
+      <Isolated>false</Isolated>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+
+</Project>

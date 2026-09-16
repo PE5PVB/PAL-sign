@@ -1,0 +1,29 @@
+## The board and its settings, so the Arduino IDE does not have to be set
+## up by hand. Pick "palsign" in the profile box; it is the default, so
+## the IDE takes it by itself.
+##
+## THE FLASH SPLIT IS NOT A PREFERENCE. The fifteen uploadable
+## photographs live in the reserved part and the firmware finds it
+## through the linker symbols _FS_start and _FS_end. Any other split puts
+## them and the saved settings somewhere else, and they are lost.
+##
+## generic_rp2350 has no menu preset for the exact 12795904-byte split in
+## platformio.ini; the nearest one, 12MB FS / 4MB sketch, reserves 212992
+## bytes less for the photo area. That still holds all fifteen slots
+## (photoSlotSpace() in src/photoflash.cpp checks and refuses to run
+## rather than overrun); only the settings journal after them shrinks,
+## from 64 flash sectors to 12, because settings.cpp sizes that journal
+## from whatever is left (photoFreeBytes()), not from a fixed count.
+##
+## The CPU speed in the FQBN does not matter: none of the values the menu
+## offers is a whole multiple of 54 MHz, so the firmware sets its own
+## clock at the top of setup(). See CFG_SYSCLK_HZ in src/config.h.
+profiles:
+  palsign:
+    notes: PAL-sign on a bare RP2350A
+    fqbn: rp2040:rp2040:generic_rp2350:flash=16777216_12582912,variantchip=RP2350A,psramcs=GPIO8,psram=0mb,opt=Optimize2,dbgport=Serial
+    platforms:
+      - platform: rp2040:rp2040 (5.5.0)
+        platform_index_url: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+default_profile: palsign

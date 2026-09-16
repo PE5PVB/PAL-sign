@@ -1,0 +1,40 @@
+; Puts out one byte per CLKIN cycle continuously on 8 OUT pins (P0-P7),
+; with a phase locked 27 MHz square wave on the side-set pin (CLKIN).
+; The clock divider has to be set so that one loop, which is two
+; instructions, equals one CLKIN period. See PIO_CLKDIV in video.cpp.
+
+.program bt656_out
+.side_set 1
+
+.wrap_target
+    out pins, 8    side 0
+    nop            side 1
+.wrap
+
+; The same stream for a board whose data bus is wired mirrored,
+; P7 on the lowest GPIO through P0 on the highest (CFG_PIXEL_BUS_REVERSED
+; in config.h). The DMA feeding this state machine byte-swaps each word
+; (CTRL.BSWAP) and the mov below bit-reverses the whole word back: net
+; effect, every byte's bits reversed with the byte order intact, at no
+; CPU cost. Explicit pull instead of autopull, and four state-machine
+; cycles per CLKIN period instead of two, so the pull and the mov fit
+; inside the fourth byte's clock-high phase and the 27 MHz cadence and
+; clock phase stay identical to bt656_out. Start at entry: the OSR is
+; empty until the first pull, and starting at the top would shift four
+; zero bytes out first.
+
+.program bt656_out_rev
+.side_set 1
+
+.wrap_target
+    out pins, 8    side 0 [1]
+    nop            side 1 [1]
+    out pins, 8    side 0 [1]
+    nop            side 1 [1]
+    out pins, 8    side 0 [1]
+    nop            side 1 [1]
+    out pins, 8    side 0 [1]
+public entry:
+    pull           side 1
+    mov osr, ::osr side 1
+.wrap

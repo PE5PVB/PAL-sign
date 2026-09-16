@@ -1,0 +1,202 @@
+(footprint "FIL_ACM2012-900-2P-T002"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "L1"
+		(at 0.73 -1.46 0)
+		(layer "F.SilkS")
+		(hide yes)
+		(uuid "de87840a-ff21-4089-af3a-c31cb6dcac37")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "ACM2012-202-2P-T002"
+		(at 5.297636 1.137328 0)
+		(layer "F.Fab")
+		(uuid "329b8b6d-3618-4de3-bd63-2aeef1d10316")
+		(effects
+			(font
+				(size 0.480476 0.480476)
+				(thickness 0.120119)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.we-online.com/components/products/datasheet/744232090.pdf"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "8dd35179-a22f-4e30-a165-48b8fd825c8e")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "Common mode choke, 370 mA, 125VDC, USB2.0, 111 nH"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "b956dfd4-97f4-4304-acfc-4e2bedbb80bb")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "LCSC" "C695352"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "f317f448-77d0-43c6-a7f2-2810bcfe77b2")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property ki_fp_filters "L*CommonMode*Wurth*WE*CNSW*1206*")
+	(sheetname "/")
+	(sheetfile "BOA-V controller.kicad_sch")
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_circle
+		(center -1.7 -0.4)
+		(end -1.6 -0.4)
+		(stroke
+			(width 0)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.SilkS")
+		(uuid "7dac1eac-2fd9-409e-9170-cfae7af61c2f")
+	)
+	(fp_line
+		(start -1.516 -0.75)
+		(end 1.516 -0.75)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "6792688d-942b-405f-ac21-f945b73a04f5")
+	)
+	(fp_line
+		(start -1.516 0.75)
+		(end -1.516 -0.75)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "622847c6-fa7e-4f71-a510-bb8864921a7e")
+	)
+	(fp_line
+		(start 1.516 -0.75)
+		(end 1.516 0.75)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "c1a0504f-b41d-48e0-b824-cb8d0793ccc4")
+	)
+	(fp_line
+		(start 1.516 0.75)
+		(end -1.516 0.75)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "d052651a-c305-4cd6-b28d-01c4f4203227")
+	)
+	(fp_line
+		(start -1 -0.6)
+		(end 1 -0.6)
+		(stroke
+			(width 0.127)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "df9cb718-d86d-4888-8697-700a14a512e1")
+	)
+	(fp_line
+		(start -1 0.6)
+		(end -1 -0.6)
+		(stroke
+			(width 0.127)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "1379d486-64d2-464d-9e72-acc73148fe41")
+	)
+	(fp_line
+		(start 1 -0.6)
+		(end 1 0.6)
+		(stroke
+			(width 0.127)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "856dd4e9-0bdf-47af-8f91-5161352ad4d0")
+	)
+	(fp_line
+		(start 1 0.6)
+		(end -1 0.6)
+		(stroke
+			(width 0.127)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "37bf994a-3eab-427a-8014-18f33dc7a94e")
+	)
+	(fp_circle
+		(center -0.8 -0.4)
+		(end -0.7 -0.4)
+		(stroke
+			(width 0)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.Fab")
+		(uuid "6eb0fd13-faff-41ad-8520-68a5e58d0d04")
+	)
+	(pad "1" smd rect
+		(at -0.925 -0.4)
+		(size 0.75 0.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(solder_mask_margin 0.102)
+		(uuid "f9fc7c89-cf6a-437a-b521-f9131e303543")
+	)
+	(pad "2" smd rect
+		(at 0.925 -0.4)
+		(size 0.75 0.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(solder_mask_margin 0.102)
+		(uuid "15e27fd3-c938-426e-a7f4-aa43276955eb")
+	)
+	(pad "3" smd rect
+		(at -0.925 0.4)
+		(size 0.75 0.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(solder_mask_margin 0.102)
+		(uuid "dd47ae1c-af98-4d21-b8ed-b4b288bbc811")
+	)
+	(pad "4" smd rect
+		(at 0.925 0.4)
+		(size 0.75 0.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(solder_mask_margin 0.102)
+		(uuid "ad8027d2-c412-4dd4-a972-125b93812502")
+	)
+	(embedded_fonts no)
+)

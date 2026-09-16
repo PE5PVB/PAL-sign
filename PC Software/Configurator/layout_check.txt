@@ -1,0 +1,235 @@
+TableLayoutPanel "" {X=0,Y=0,Width=762,Height=933}
+  Panel "" {X=3,Y=3,Width=756,Height=59}
+    TableLayoutPanel "" {X=12,Y=10,Width=732,Height=40}
+      FlowLayoutPanel "" {X=0,Y=0,Width=275,Height=40}
+        Label "Port:" {X=0,Y=8,Width=38,Height=20}
+        ComboBox "COM34" {X=48,Y=4,Width=130,Height=28}
+        Button "Search" {X=190,Y=2,Width=85,Height=38}
+      Button "Save" {X=328,Y=2,Width=75,Height=38}
+      FlowLayoutPanel "" {X=406,Y=0,Width=326,Height=40}
+        Button "About" {X=0,Y=2,Width=82,Height=38}
+        CheckBox "Always on top" {X=94,Y=8,Width=125,Height=24}
+        Button "Connect" {X=231,Y=0,Width=95,Height=38}
+  Panel "" {X=3,Y=68,Width=756,Height=862}
+    Label "" {X=386,Y=9,Width=360,Height=20}
+    TabControl "" {X=10,Y=10,Width=736,Height=842}
+      CardsTab "Cards" {X=4,Y=39,Width=728,Height=799}
+        TableLayoutPanel "" {X=12,Y=12,Width=704,Height=775}
+          ListBox "" {X=3,Y=3,Width=254,Height=761}
+          TableLayoutPanel "" {X=263,Y=3,Width=438,Height=374}
+            Label "" {X=15,Y=0,Width=0,Height=20}
+            CheckBox "Card enabled" {X=145,Y=3,Width=120,Height=24}
+            Label "Aspect / WSS" {X=12,Y=36,Width=98,Height=20}
+            ComboBox "" {X=145,Y=33,Width=290,Height=28}
+            Label "Text font" {X=12,Y=70,Width=67,Height=20}
+            ComboBox "" {X=145,Y=67,Width=256,Height=28}
+            Label "Ticker" {X=12,Y=104,Width=48,Height=20}
+            TableLayoutPanel "" {X=142,Y=98,Width=296,Height=34}
+              ComboBox "" {X=3,Y=3,Width=256,Height=28}
+              Button "" {X=266,Y=3,Width=30,Height=23}
+            Label "Ticker font" {X=12,Y=138,Width=79,Height=20}
+            ComboBox "" {X=145,Y=135,Width=256,Height=28}
+            Label "Ticker font size" {X=12,Y=172,Width=108,Height=20}
+            ComboBox "" {X=145,Y=169,Width=256,Height=28}
+            Label "Band at row" {X=12,Y=206,Width=89,Height=20}
+            TableLayoutPanel "" {X=142,Y=200,Width=296,Height=40}
+              AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+              Label "" {X=212,Y=8,Width=0,Height=20}
+            Label "Ticker speed" {X=12,Y=246,Width=92,Height=20}
+            TableLayoutPanel "" {X=142,Y=240,Width=296,Height=40}
+              AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+              Label "" {X=212,Y=8,Width=0,Height=20}
+            Label "Insert boxes" {X=12,Y=286,Width=88,Height=20}
+            TableLayoutPanel "" {X=142,Y=280,Width=296,Height=34}
+              ComboBox "" {X=3,Y=3,Width=256,Height=28}
+              Button "" {X=266,Y=3,Width=30,Height=23}
+            Label "" {X=15,Y=314,Width=0,Height=20}
+            TableLayoutPanel "" {X=142,Y=314,Width=296,Height=60}
+              TableLayoutPanel "" {X=0,Y=0,Width=296,Height=30}
+                CheckBox "Show first line on this " {X=3,Y=3,Width=205,Height=24}
+                Button "" {X=266,Y=3,Width=30,Height=23}
+              TableLayoutPanel "" {X=0,Y=30,Width=296,Height=30}
+                CheckBox "Show second line on this" {X=3,Y=3,Width=227,Height=24}
+                Button "" {X=266,Y=3,Width=30,Height=23}
+          TableLayoutPanel "" {X=272,Y=380,Width=432,Height=387}
+            SteadyPanel "" {X=3,Y=3,Width=426,Height=343}
+            Button "Save as picture..." {X=141,Y=349,Width=149,Height=38}
+          FlowLayoutPanel "" {X=0,Y=775,Width=704,Height=1}
+(the per-card switches are shown for this check)
+CardsTab "Cards" {X=4,Y=39,Width=728,Height=799}
+  TableLayoutPanel "" {X=12,Y=12,Width=704,Height=775}
+    ! TableLayoutPanel "" {X=263,Y=3,Width=438,Height=815} falls outside TableLayoutPanel {X=0,Y=0,Width=704,Height=775}
+    ! TableLayoutPanel "" {X=272,Y=821,Width=432,Height=1} falls outside TableLayoutPanel {X=0,Y=0,Width=704,Height=775}
+    ListBox "" {X=3,Y=3,Width=254,Height=761}
+    TableLayoutPanel "" {X=263,Y=3,Width=438,Height=815}
+      Label "" {X=15,Y=0,Width=0,Height=20}
+      CheckBox "Card enabled" {X=145,Y=3,Width=120,Height=24}
+      Label "Aspect / WSS" {X=12,Y=36,Width=98,Height=20}
+      ComboBox "" {X=145,Y=33,Width=290,Height=28}
+      Label "Text font" {X=12,Y=70,Width=67,Height=20}
+      ComboBox "" {X=145,Y=67,Width=256,Height=28}
+      Label "Ticker" {X=12,Y=104,Width=48,Height=20}
+      TableLayoutPanel "" {X=142,Y=98,Width=296,Height=34}
+        ComboBox "" {X=3,Y=3,Width=256,Height=28}
+        Button "" {X=266,Y=3,Width=30,Height=23}
+      Label "Ticker font" {X=12,Y=138,Width=79,Height=20}
+      ComboBox "" {X=145,Y=135,Width=256,Height=28}
+      Label "Ticker font size" {X=12,Y=172,Width=108,Height=20}
+      ComboBox "" {X=145,Y=169,Width=256,Height=28}
+      Label "Band at row" {X=12,Y=206,Width=89,Height=20}
+      TableLayoutPanel "" {X=142,Y=200,Width=296,Height=40}
+        AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+        Label "" {X=212,Y=8,Width=0,Height=20}
+      Label "Ticker speed" {X=12,Y=246,Width=92,Height=20}
+      TableLayoutPanel "" {X=142,Y=240,Width=296,Height=40}
+        AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+        Label "" {X=212,Y=8,Width=0,Height=20}
+      Label "Insert boxes" {X=12,Y=286,Width=88,Height=20}
+      TableLayoutPanel "" {X=142,Y=280,Width=296,Height=34}
+        ComboBox "" {X=3,Y=3,Width=256,Height=28}
+        Button "" {X=266,Y=3,Width=30,Height=23}
+      Label "" {X=15,Y=314,Width=0,Height=20}
+      TableLayoutPanel "" {X=142,Y=314,Width=296,Height=501}
+        TableLayoutPanel "" {X=0,Y=0,Width=296,Height=30}
+          CheckBox "Show first line on this " {X=3,Y=3,Width=205,Height=24}
+          Button "" {X=266,Y=3,Width=30,Height=23}
+        TableLayoutPanel "" {X=0,Y=30,Width=296,Height=30}
+          CheckBox "Show second line on this" {X=3,Y=3,Width=227,Height=24}
+          Button "" {X=266,Y=3,Width=30,Height=23}
+        CheckBox "Moving line on this card" {X=3,Y=63,Width=190,Height=24}
+        CheckBox "Chroma test bars" {X=3,Y=93,Width=143,Height=24}
+        CheckBox "AP2 variant" {X=3,Y=123,Width=106,Height=24}
+        TableLayoutPanel "" {X=0,Y=154,Width=279,Height=112}
+          Label "Top line" {X=0,Y=6,Width=62,Height=20}
+          TextBox "" {X=91,Y=3,Width=185,Height=27}
+          Label "Bottom line" {X=0,Y=39,Width=63,Height=40}
+          TextBox "" {X=91,Y=36,Width=185,Height=27}
+          Label "Number" {X=0,Y=85,Width=63,Height=20}
+          FixedDigits "0000" {X=91,Y=82,Width=80,Height=27}
+            UpDownButtons "" {X=59,Y=1,Width=20,Height=25}
+            UpDownEdit "0000" {X=2,Y=2,Width=56,Height=23}
+        CheckBox "Show custom photo" {X=3,Y=269,Width=163,Height=24}
+        Button "Upload portrait..." {X=3,Y=299,Width=153,Height=38}
+        TableLayoutPanel "" {X=0,Y=340,Width=263,Height=34}
+          Label "Resolution" {X=0,Y=6,Width=79,Height=20}
+          ComboBox "" {X=90,Y=3,Width=170,Height=28}
+        CheckBox "Pre-emphasis 50/15 us" {X=3,Y=377,Width=180,Height=24}
+        CheckBox "Control line in picture" {X=3,Y=407,Width=174,Height=24}
+        TableLayoutPanel "" {X=0,Y=434,Width=202,Height=33}
+          Label "PCM text" {X=0,Y=6,Width=68,Height=20}
+          TextBox "" {X=79,Y=3,Width=120,Height=27}
+        TableLayoutPanel "" {X=0,Y=467,Width=270,Height=34}
+          Label "Quality" {X=0,Y=6,Width=56,Height=20}
+          ComboBox "" {X=67,Y=3,Width=200,Height=28}
+    TableLayoutPanel "" {X=272,Y=821,Width=432,Height=1}
+      ! SteadyPanel "" {X=3,Y=3,Width=426,Height=150} falls outside TableLayoutPanel {X=0,Y=0,Width=432,Height=1}
+      ! Button "Save as picture..." {X=141,Y=-37,Width=149,Height=38} falls outside TableLayoutPanel {X=0,Y=0,Width=432,Height=1}
+      SteadyPanel "" {X=3,Y=3,Width=426,Height=150}
+      Button "Save as picture..." {X=141,Y=-37,Width=149,Height=38}
+    FlowLayoutPanel "" {X=0,Y=775,Width=704,Height=1}
+(preview panel 426x150, picture 187 wide)
+(and now with every optional row left out)
+CardsTab "Cards" {X=4,Y=39,Width=728,Height=799}
+  TableLayoutPanel "" {X=12,Y=12,Width=704,Height=775}
+    ListBox "" {X=3,Y=3,Width=254,Height=761}
+    TableLayoutPanel "" {X=263,Y=3,Width=438,Height=266}
+      Label "" {X=15,Y=0,Width=0,Height=20}
+      CheckBox "Card enabled" {X=145,Y=3,Width=120,Height=24}
+      Label "Aspect / WSS" {X=12,Y=36,Width=98,Height=20}
+      ComboBox "" {X=145,Y=33,Width=290,Height=28}
+      Label "Ticker" {X=12,Y=70,Width=48,Height=20}
+      TableLayoutPanel "" {X=142,Y=64,Width=296,Height=34}
+        ComboBox "" {X=3,Y=3,Width=256,Height=28}
+        Button "" {X=266,Y=3,Width=30,Height=23}
+      Label "Ticker font" {X=12,Y=104,Width=79,Height=20}
+      ComboBox "" {X=145,Y=101,Width=256,Height=28}
+      Label "Ticker font size" {X=12,Y=138,Width=108,Height=20}
+      ComboBox "" {X=145,Y=135,Width=256,Height=28}
+      Label "Band at row" {X=12,Y=172,Width=89,Height=20}
+      TableLayoutPanel "" {X=142,Y=166,Width=296,Height=40}
+        AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+        Label "" {X=212,Y=8,Width=0,Height=20}
+      Label "Ticker speed" {X=12,Y=212,Width=92,Height=20}
+      TableLayoutPanel "" {X=142,Y=206,Width=296,Height=40}
+        AccentSlider "" {X=3,Y=3,Width=200,Height=34}
+        Label "" {X=212,Y=8,Width=0,Height=20}
+      Label "" {X=15,Y=246,Width=0,Height=20}
+      TableLayoutPanel "" {X=142,Y=246,Width=296,Height=20}
+    TableLayoutPanel "" {X=272,Y=272,Width=432,Height=495}
+      SteadyPanel "" {X=3,Y=3,Width=426,Height=451}
+      Button "Save as picture..." {X=141,Y=457,Width=149,Height=38}
+    FlowLayoutPanel "" {X=0,Y=775,Width=704,Height=1}
+(preview panel 426x451, picture 426 wide)
+SlideshowTab "Slideshow" {X=4,Y=39,Width=728,Height=799}
+  TableLayoutPanel "" {X=12,Y=12,Width=704,Height=775}
+    Label "Drag a card into the rig" {X=0,Y=0,Width=521,Height=100}
+    TableLayoutPanel "" {X=0,Y=108,Width=704,Height=469}
+      Label "Cards" {X=3,Y=0,Width=48,Height=20}
+      Label "Sequence" {X=355,Y=0,Width=75,Height=20}
+      ListBox "" {X=0,Y=22,Width=346,Height=447}
+      ListBox "" {X=358,Y=22,Width=346,Height=447}
+    FlowLayoutPanel "" {X=0,Y=585,Width=427,Height=38}
+      Label "Seconds for the selected" {X=0,Y=6,Width=206,Height=20}
+      NumericUpDown "2,0" {X=214,Y=2,Width=70,Height=27}
+        UpDownButtons "" {X=49,Y=1,Width=20,Height=25}
+        UpDownEdit "2,0" {X=2,Y=2,Width=46,Height=23}
+      Button "Remove step" {X=300,Y=0,Width=127,Height=38}
+    FlowLayoutPanel "" {X=0,Y=631,Width=550,Height=38}
+      Button "Start slideshow" {X=0,Y=0,Width=141,Height=38}
+      Button "Read from board" {X=157,Y=0,Width=155,Height=38}
+      Button "Write to board" {X=320,Y=0,Width=139,Height=38}
+      Button "Clear" {X=467,Y=0,Width=75,Height=38}
+    TextBox "" {X=0,Y=685,Width=704,Height=90}
+SystemTab "System" {X=4,Y=39,Width=728,Height=799}
+  ScrollHost "" {X=12,Y=12,Width=704,Height=775}
+    (scrolls, so longer than its box is allowed)
+    TableLayoutPanel "" {X=0,Y=0,Width=683,Height=1021}
+      CardPanel "" {X=0,Y=0,Width=683,Height=247}
+        Panel "" {X=1,Y=61,Width=681,Height=185}
+          TableLayoutPanel "" {X=13,Y=8,Width=655,Height=165}
+            Label "First line" {X=0,Y=6,Width=64,Height=20}
+            TextBox "" {X=113,Y=3,Width=539,Height=27}
+            Label "Second line" {X=0,Y=39,Width=86,Height=20}
+            TextBox "" {X=113,Y=36,Width=539,Height=27}
+            Label "Ticker text" {X=0,Y=72,Width=77,Height=20}
+            TextBox "" {X=113,Y=69,Width=539,Height=27}
+            Label "Text date" {X=0,Y=105,Width=70,Height=20}
+            TextBox "" {X=113,Y=102,Width=539,Height=27}
+            Label "Text time" {X=0,Y=138,Width=70,Height=20}
+            TextBox "" {X=113,Y=135,Width=539,Height=27}
+        Label "Texts" {X=1,Y=31,Width=681,Height=30}
+      CardPanel "" {X=0,Y=259,Width=683,Height=150}
+        Panel "" {X=1,Y=61,Width=681,Height=88}
+          TableLayoutPanel "" {X=13,Y=8,Width=655,Height=68}
+            Label "Luma filter" {X=0,Y=6,Width=80,Height=20}
+            ComboBox "" {X=113,Y=3,Width=539,Height=28}
+            Label "Chroma filter" {X=0,Y=40,Width=96,Height=20}
+            ComboBox "" {X=113,Y=37,Width=539,Height=28}
+        Label "Signal" {X=1,Y=31,Width=681,Height=30}
+      CardPanel "" {X=0,Y=421,Width=683,Height=122}
+        Panel "" {X=1,Y=61,Width=681,Height=60}
+          TableLayoutPanel "" {X=13,Y=8,Width=655,Height=40}
+            AccentSlider "" {X=3,Y=3,Width=593,Height=34}
+            Label "" {X=605,Y=9,Width=0,Height=20}
+        Label "Display brightness" {X=1,Y=31,Width=681,Height=30}
+      CardPanel "" {X=0,Y=555,Width=683,Height=82}
+        Panel "" {X=1,Y=61,Width=681,Height=20}
+          TableLayoutPanel "" {X=13,Y=8,Width=655,Height=0}
+        Label "Picture controls" {X=1,Y=31,Width=681,Height=30}
+      CardPanel "" {X=0,Y=649,Width=683,Height=274}
+        Panel "" {X=1,Y=61,Width=681,Height=212}
+          FlowLayoutPanel "" {X=13,Y=8,Width=655,Height=192}
+            CheckBox "Blanking open (without t" {X=3,Y=3,Width=399,Height=24}
+            CheckBox "Teletext on lines 7-22 a" {X=3,Y=33,Width=259,Height=24}
+            Button "Teletext page..." {X=20,Y=60,Width=140,Height=38}
+            CheckBox "Insertion test signals o" {X=3,Y=105,Width=291,Height=24}
+            CheckBox "Fade between slides (off" {X=3,Y=135,Width=402,Height=24}
+            CheckBox "Automatic summer/winter " {X=3,Y=165,Width=299,Height=24}
+        Label "Switches" {X=1,Y=31,Width=681,Height=30}
+      FlowLayoutPanel "" {X=0,Y=939,Width=683,Height=26}
+        Label "" {X=8,Y=6,Width=0,Height=20}
+      FlowLayoutPanel "" {X=0,Y=977,Width=683,Height=44}
+        Button "Fetch all again" {X=3,Y=3,Width=137,Height=38}
+        Button "Log" {X=151,Y=0,Width=75,Height=38}
+        Button "Update firmware..." {X=234,Y=0,Width=162,Height=38}
+4 problem(s) found.
