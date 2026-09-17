@@ -13,6 +13,7 @@ A standalone hardware test card generator for anyone working with analogue telev
 - A slideshow with a fade between pictures
 - A scrolling ticker band, colour, speed and size configurable per card
 - An on-device menu on its own screen, driven by a rotary encoder, so every setting is reachable without a PC
+- Optional PCM audio: with a PCM1808 ADC attached, two extra cards embed stereo sound in the picture itself (see "PCM audio" below)
 - A Windows configurator to upload your own pictures and change every setting from a PC
 
 ## Controls and settings
@@ -89,6 +90,45 @@ The twenty built-in test cards are pixel data compiled straight into the firmwar
 
 ### The screen and the knob
 The screen on the front is a plain SPI display, and the knob next to it is an ordinary quadrature rotary encoder, decoded from a GPIO interrupt so a fast turn is never missed; see "Controls and settings" above for what they do.
+
+## Connecting the screen and the knob
+The screen and the rotary encoder live on their own small front panel PCB, connected with a flatcable, and the whole panel is optional: one pin on the cable tells the firmware whether it is there, and without it the board runs headless and keeps generating video.
+
+The display is an **ST7789P3** SPI panel of **76 x 284 pixels** (a window inside the controller's 240 x 320 frame memory), driven over SPI0. The knob is an ordinary quadrature rotary encoder with a push switch; the RP2350's internal pull-ups do the rest, so the panel needs no resistors or capacitors of its own.
+
+| Signal | GPIO | Notes |
+|---|---|---|
+| Display RST | GP19 | |
+| Display CS | GP20 | |
+| Display DC | GP21 | low = command |
+| Display SCK | GP22 | SPI0 SCK |
+| Display MOSI (SDA) | GP23 | SPI0 TX |
+| Display backlight | GP26 | active high |
+| Panel present | GP24 | tie to GND on the panel |
+| Encoder phase A | GP27 | internal pull-up |
+| Encoder phase B | GP28 | internal pull-up |
+| Encoder push | GP29 | internal pull-up |
+
+Plus 3.3 V and GND for the panel itself. The encoder's common and the switch's other side go to GND.
+
+## PCM audio
+An optional PCM1808 audio ADC turns the generator into a video-plus-audio source: the analogue stereo input is sampled at 48 kHz and embedded in the picture itself as data lines, in the spirit of the PCM adaptors of the early digital audio era. Two extra cards carry it:
+
+- **Ham PCM**: an own format designed for FM ATV links, with Reed-Solomon error protection, a small text channel, and four quality modes: HQ (48 kHz, 14 bit stereo), LQ (32 kHz, 12 bit stereo), Voice (32 kHz A-law) and Narrow (16 kHz mono A-law).
+- **Sony PCM**: a Sony/EIAJ STC-007-compatible signal (44.1 kHz, 14 or 16 bit, selectable pre-emphasis) that period PCM adaptors and third-party software decoders understand.
+
+Both cards appear automatically when the ADC is detected at power-on, and stay completely hidden without it, on the board, in the menu and in the PC tool alike. The `PcmDecoder` tool in `PC Software/` plays the audio back on a PC from a composite capture card, with a live view of the decode quality.
+
+The ADC connects over I2S, with the PCM1808 in master mode: the board supplies only the 12.288 MHz system clock, and the ADC generates its own bit and word clocks from it.
+
+| Signal | GPIO | Direction |
+|---|---|---|
+| SCKI (256 fs master clock) | GP13 | board to ADC |
+| BCK (bit clock) | GP9 | ADC to board |
+| LRCK (word clock) | GP10 | ADC to board |
+| DOUT (I2S data) | GP11 | ADC to board |
+
+Plus supply and GND for the ADC board. The PCM1808's mode pins go high for master mode (MD1 = MD0 = high).
 
 ## Repository layout
 - `Firmware/` -- the firmware for the RP2350, built with PlatformIO or the Arduino IDE
