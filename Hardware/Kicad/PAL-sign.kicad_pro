@@ -134,6 +134,14 @@
           ""
         ],
         [
+          "silk_over_copper|140140000|114050000|01e418f1-f106-483a-b3d3-2fbd1debf402|c20f0e73-d35f-4515-b64d-5eec131d15c5",
+          ""
+        ],
+        [
+          "silk_over_copper|140140000|85550000|5604016a-5ce6-4cad-9dac-a32cca72178e|5e0558ab-1599-42e0-8e58-f3e5d4ba6a78",
+          ""
+        ],
+        [
           "silk_over_copper|151592000|58380000|61c9dc55-ad7f-4ed0-8019-ff12b36561d7|9b62d0f5-1d9d-4944-ac25-5d61329ca061",
           ""
         ],
@@ -845,6 +853,12 @@
           "label": "KLC_S4.2_VREG_LX",
           "name": "KLC_S4.2_VREG_LX",
           "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Type",
+          "name": "Sim.Type",
+          "show": false
         }
       ],
       "filter_string": "",
@@ -900,7 +914,7 @@
         "uuid": "5e4b4b86-505e-4573-b1db-0e4430e7f8ee"
       }
     ],
-    "used_designators": "#FLG1-7,R1-30,U1-13,D1-6,L1-6,#PWR1-90,C1-63,SW1-2,Y1,J1-8,FB1-5,H1-4,FID1-4",
+    "used_designators": "#FLG1-7,R1-30,U1-13,D1-6,L1-6,#PWR1-90,C1-63,SW1-2,Y1,J1-8,FB1-5,H1-4,FID1-4,BT1",
     "variants": []
   },
   "sheets": [
