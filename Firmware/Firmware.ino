@@ -513,6 +513,7 @@ static void printHelp() {
   Serial.println(LANG_WHICH_CARD_IS_ON);
   Serial.println(LANG_F_SETTINGS_BACK_TO);
   Serial.println(LANG_G_REBOOT_INTO_THE);
+  Serial.println(LANG_M_REBOOT_THE_BOARD);
   Serial.println(LANG_L_DISPLAY_ALIGNMENT_PICTURE);
   Serial.println(LANG_O_O_J_J);
   Serial.println(LANG_H_G_V_B);
@@ -2107,6 +2108,13 @@ static void handleSerialChar(int ch) {
     Serial.println(LANG_RESET_REBOOTING_INTO_THE_USB);
     Serial.flush();
     rp2040.rebootToBootloader();
+  } else if (ch == 'M') {
+    // Warm restart into the application (not the bootloader): re-runs
+    // setup(), so it exercises the settings restore path. 0,0 selects the
+    // normal boot vector; the flash settings block is untouched.
+    Serial.println(LANG_RESET_REBOOTING);
+    Serial.flush();
+    watchdog_reboot(0, 0, 10);
   } else if (ch == 'z') {
     sflTimingReset();
   } else if (ch == 'A') {
@@ -3483,6 +3491,12 @@ void videoFrameHook() {
   // Once a frame, not once a row as before: 625 times cheaper, still
   // feeds the watchdog every 40 ms against an 8 s timeout.
   videoFeedWatchdog();
+
+  // PAL phase-frame selection for a two-frame card (PM5644), locked to the
+  // encoder's own 8-field counter (0xBB) so the ROM frame stays in step
+  // with the ADV's field sequence. Bit 1 of the counter changes once per
+  // frame (25 Hz); a still card has no phaseBars and ignores the flag.
+  videoSetPhaseFrame((advReadFieldCount() >> 1) & 1);
 
   // The row-counter wrap guard, first half; see VIDEO_RENORM_STEP in
   // videoloop.h. Core1 answers within a row (its videoLoadLine runs

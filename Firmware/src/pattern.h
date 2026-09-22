@@ -8,6 +8,14 @@
 
 #include <stdint.h>
 
+// A run of 4:2:2 pixel pairs (each pair is the four bytes Cb,Y,Cr,Y)
+// whose chroma gets inverted about 128 on alternate frames; see
+// Pattern::phaseBars. first/last are pair indices, 0..359.
+struct PhasePairRange {
+  uint16_t first;
+  uint16_t last;
+};
+
 struct Pattern {
   const char *name;
 
@@ -55,6 +63,24 @@ struct Pattern {
   // its init), and no teletext or ITS in the blanking: a data format
   // that counts lines from the vertical sync cannot have any of them.
   bool rawSignal;
+
+  // Optional (NULL/0 for a still card). A test card stored as two PAL
+  // phase frames (PM5644 and kin) alternates at 25 Hz: on every other
+  // frame the chroma of these pixel-pair ranges is inverted about 128, a
+  // 180 degree subcarrier phase flip of the delay-line reference bars.
+  // The luma and the rest of the chroma are identical in both frames, so
+  // the inversion runs unconditionally over these ranges: outside the
+  // bars the chroma is neutral 128 and 256-128 leaves it untouched.
+  const PhasePairRange *phaseBars;
+  int phaseBarCount;
+
+  // true when the reference bars already carry the +-V PAL-switch
+  // alternation in the pixel data (both PM5644 G00 and G924 do, measured
+  // from the ROM): the phase flip is then XORed with the analogue line
+  // parity so it survives the encoder's own V-switch. false would suit
+  // bars stored as a solid colour, where the encoder makes the alternation
+  // and a plain per-frame flip is right.
+  bool phaseBarsLineComp;
 };
 
 // The pattern the video layer is sending out at the moment.

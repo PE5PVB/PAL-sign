@@ -99,5 +99,14 @@ static void pm5644g924RenderRow(uint8_t *base, int y) {
   movingLineDrawRow(base, y);   // last, so the stripe crosses the text unbroken
 }
 
+// The two chroma reference bars, decoded from the EPROM's two PAL phase
+// frames. Like G00 they carry the +-V PAL-switch alternation per line, so
+// lineComp is true. In pixel pairs of the 720 sample line: left (pure
+// R-Y) pairs 3..27, pixels 6..55; right (pure B-Y) pairs 332..345, pixels
+// 664..691. The frames are byte-identical except the chroma of these bars.
+static const PhasePairRange pm5644g924PhaseBars[] = {{3, 27}, {332, 345}};
+
 const Pattern PATTERN_PM5644G924 = {LANG_CARD_PM5644_16X9, pm5644g924Init, pm5644g924RenderRow,
-                                    pm5644g924Tick, false, false, pm5644g924Reflow};
+                                    pm5644g924Tick, false, false, pm5644g924Reflow,
+                                    nullptr, false, false,
+                                    pm5644g924PhaseBars, 2, true};

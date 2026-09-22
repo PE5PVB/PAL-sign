@@ -149,6 +149,12 @@ static inline void __not_in_flash_func(blankEdges)(uint8_t *active) {
 // changed (measured: 41 to 57 us on Ham PCM, min 21 to 23). The two
 // small hot routines live in RAM now so the layout cannot do that
 // again.
+// Which of the two PAL phase frames is going out now, for a card that
+// stores both (PM5644). Toggled once per frame by videoTogglePhaseFrame()
+// from the frame hook, so it is constant across a frame's two fields.
+static bool videoPhaseFrame = false;
+void videoSetPhaseFrame(bool on) { videoPhaseFrame = on; }
+
 void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
   bool field2 = (line >= 313);
   uint32_t fieldLine = field2 ? (line - 312) : line;  // 1-based within the field
@@ -176,6 +182,21 @@ void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
     patternRenderRow(p, y);
     if (!activePattern->keepEdges) blankEdges(p);
     displaySampleRow(p, y, videoDisplaySample);   // must run even with no time to spare
+    // Second PAL phase frame: invert the reference bars' chroma about 128.
+    // For G00 the bars carry the +-V alternation themselves, so XOR with
+    // the line parity to survive the encoder's V-switch (else the two
+    // interlaced fields cancel and the blink vanishes); for G924 the bars
+    // are solid and a plain per-frame flip is right (phaseBarsLineComp).
+    bool phase = videoPhaseFrame ^ (activePattern->phaseBarsLineComp && ((int)line & 1));
+    if (phase && activePattern->phaseBars) {
+      for (int b = 0; b < activePattern->phaseBarCount; b++) {
+        for (uint32_t k = activePattern->phaseBars[b].first;
+             k <= activePattern->phaseBars[b].last; k++) {
+          p[4 * k + 0] = (uint8_t)(256 - p[4 * k + 0]);   // Cb
+          p[4 * k + 2] = (uint8_t)(256 - p[4 * k + 2]);   // Cr
+        }
+      }
+    }
     p += ACTIVE_SAMPLES;
   } else if (activePattern->vbiLine && activePattern->vbiLine(p, line)) {
     p += ACTIVE_SAMPLES;   // the card's own blanking-line data comes first

@@ -113,5 +113,14 @@ static void pm5644g00RenderRow(uint8_t *base, int y) {
   movingLineDrawRow(base, y);   // last, so the stripe crosses the text unbroken
 }
 
+// The two chroma reference bars flanking the centre circle carry opposite
+// subcarrier phase on the EPROM's two PAL phase frames. In pixel pairs of
+// the 720 sample line: the left one (pure R-Y) is pairs 16..34, pixels
+// 32..69; the right one (pure B-Y) is pairs 324..343, pixels 648..687.
+// Everything else is identical between the frames.
+static const PhasePairRange pm5644g00PhaseBars[] = {{16, 34}, {324, 343}};
+
 const Pattern PATTERN_PM5644G00 = {LANG_CARD_PM5644, pm5644g00Init, pm5644g00RenderRow, pm5644g00Tick,
-                                   false, false, pm5644g00Reflow};
+                                   false, false, pm5644g00Reflow,
+                                   nullptr, false, false,
+                                   pm5644g00PhaseBars, 2, true};
