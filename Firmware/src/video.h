@@ -56,8 +56,9 @@ void videoGetStats(VideoStats *s);
 // Called once per frame from the producer loop, in vertical blanking.
 void videoFrameHook();
 
-// Flips to the other PAL phase frame; call once per frame for a card
-// that stores two (Pattern::phaseBars). Constant across a frame's fields.
+// Selects the PAL phase frame for a card that stores two
+// (Pattern::phaseBars); set once per frame from the encoder's field
+// counter, so it is constant across a frame's two fields.
 void videoSetPhaseFrame(bool on);
 
 // Kicks the hardware watchdog, only when core1 has made progress since

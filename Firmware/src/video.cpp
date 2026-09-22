@@ -138,6 +138,13 @@ static inline void __not_in_flash_func(blankEdges)(uint8_t *active) {
   for (int i = 356; i < 360; i++) w[i] = 0x10801080u;          // samples 712..719
 }
 
+// Which of the two PAL phase frames is going out now, for a card that
+// stores both (PM5644). Set once per frame from the encoder's field
+// counter by videoSetPhaseFrame() in the frame hook, so it is constant
+// across a frame's two fields.
+static bool videoPhaseFrame = false;
+void videoSetPhaseFrame(bool on) { videoPhaseFrame = on; }
+
 // Fills buf with one complete BT.656 line (SAV, active picture, EAV,
 // blanking). line runs from 1 through 625.
 //
@@ -149,12 +156,6 @@ static inline void __not_in_flash_func(blankEdges)(uint8_t *active) {
 // changed (measured: 41 to 57 us on Ham PCM, min 21 to 23). The two
 // small hot routines live in RAM now so the layout cannot do that
 // again.
-// Which of the two PAL phase frames is going out now, for a card that
-// stores both (PM5644). Toggled once per frame by videoTogglePhaseFrame()
-// from the frame hook, so it is constant across a frame's two fields.
-static bool videoPhaseFrame = false;
-void videoSetPhaseFrame(bool on) { videoPhaseFrame = on; }
-
 void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
   bool field2 = (line >= 313);
   uint32_t fieldLine = field2 ? (line - 312) : line;  // 1-based within the field
@@ -183,15 +184,21 @@ void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
     if (!activePattern->keepEdges) blankEdges(p);
     displaySampleRow(p, y, videoDisplaySample);   // must run even with no time to spare
     // Second PAL phase frame: invert the reference bars' chroma about 128.
-    // For G00 the bars carry the +-V alternation themselves, so XOR with
-    // the line parity to survive the encoder's V-switch (else the two
-    // interlaced fields cancel and the blink vanishes); for G924 the bars
-    // are solid and a plain per-frame flip is right (phaseBarsLineComp).
+    // The PM5644 bars (G00 and G924 alike, measured from the ROM) carry the
+    // +-V alternation in the pixel data, so XOR with the line parity to
+    // survive the encoder's V-switch: without it the two interlaced fields
+    // cancel and the 25 Hz blink vanishes. phaseBarsLineComp is the card's
+    // say; a card storing solid bars would set it false for a plain flip.
     bool phase = videoPhaseFrame ^ (activePattern->phaseBarsLineComp && ((int)line & 1));
     if (phase && activePattern->phaseBars) {
-      for (int b = 0; b < activePattern->phaseBarCount; b++) {
-        for (uint32_t k = activePattern->phaseBars[b].first;
-             k <= activePattern->phaseBars[b].last; k++) {
+      // Hoisted into locals: the byte stores to p could alias the Pattern
+      // as far as the compiler knows, which forced a reload of first/last
+      // and the table pointer on every pair.
+      const PhasePairRange *bars = activePattern->phaseBars;
+      const int n = activePattern->phaseBarCount;
+      for (int b = 0; b < n; b++) {
+        const uint32_t first = bars[b].first, last = bars[b].last;
+        for (uint32_t k = first; k <= last; k++) {
           p[4 * k + 0] = (uint8_t)(256 - p[4 * k + 0]);   // Cb
           p[4 * k + 2] = (uint8_t)(256 - p[4 * k + 2]);   // Cr
         }
