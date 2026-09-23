@@ -97,7 +97,7 @@ SETS = {
     "multiburst": {
         "title": "Multiburst",
         "source": "computed",
-        "note": "test signal: white reference plus six frequency packets",
+        "note": "test signal: full-field PAL multiburst (pedestal, C1 bar, 0.5-5.5 MHz bursts)",
     },
     "fubk4x3": {
         "title": "FUBK 4:3",
@@ -201,34 +201,52 @@ def reduce_levels(a, n_levels, max_error=None):
 # against, then six packets of sine of equal amplitude and rising
 # frequency. On a good chain all six are the same height; if the last
 # packet sags, you know exactly where the bandwidth stops.
-MULTIBURST_MHZ = (0.5, 1.0, 2.0, 3.0, 4.0, 4.8)
+# The full-field Multiburst card: a black and a white reference bar,
+# then six bursts on a 50% pedestal at these frequencies, the set
+# professional PAL bench generators show. The bursts run full amplitude
+# (+/- 0.350 V), so their peaks reach white and their troughs reach
+# black; the white bar is therefore the amplitude reference. Unlike the
+# J.63 insertion line 18 (which stays in a 0.14..0.56 V window and has
+# no true black or white), this card carries real 0 V and 0.7 V
+# references. The inserted ITS line 18 is unaffected; this card is
+# independent.
+CARD_MULTIBURST = (0.5, 1.5, 2.5, 3.5, 4.5, 5.5)
 
 
 def build_frame_multiburst():
-    """Compute the multiburst signal; monochrome."""
-    fs = 13.5e6
-    y = np.full(SCREEN_W, 126.0)  # rest level, halfway between black and white
+    """The full-field PAL multiburst card, monochrome.
 
-    # Calibration blocks: 0..47 black, 48..95 white. With those you can
-    # fix the vertical scale on the scope before measuring the packets.
-    y[0:48] = 16
-    y[48:96] = 235
+    Built pointwise at 13.5 MHz: the bursts sit below Nyquist and the
+    bar edges are sin-squared shaped, so nothing folds and no band
+    limiting is needed. Every burst spans a whole number of cycles
+    (6 us = an integer count for every 0.5 MHz multiple), so it starts
+    and ends exactly at pedestal level with no step.
+    """
+    import make_its
 
-    # Six packets of 96 px with 4 px of rest in between, from x=112. That
-    # runs to 708 and so fits within the 720.
-    amp = 66.0  # 60% of the range, so 60..192: stays within 16..235
-    width, gap, x0 = 96, 4, 112
-    assert x0 + len(MULTIBURST_MHZ) * width + (len(MULTIBURST_MHZ) - 1) * gap <= SCREEN_W
-    for mhz in MULTIBURST_MHZ:
-        n = np.arange(width)
-        y[x0:x0 + width] = 126 + amp * np.sin(2 * np.pi * mhz * 1e6 * n / fs)
-        x0 += width + gap
+    fs = 13.5
+    black, white, ped, amp = 0.0, 0.700, 0.350, 0.350
+    v = np.full(SCREEN_W, ped)
 
-    Y = np.clip(np.round(y), 16, 235).astype(np.uint8)
+    def ramp(a, b, n):
+        return a + (b - a) * np.sin(np.linspace(0.0, np.pi / 2.0, n)) ** 2
 
+    x = 0
+    v[x:x + 60] = black; x += 60          # black reference
+    v[x:x + 6] = ramp(black, white, 6); x += 6
+    v[x:x + 60] = white; x += 60          # white reference
+    v[x:x + 6] = ramp(white, ped, 6); x += 6
+
+    burst_px, slot, start = 81, 93, 140   # 81 px = 6 us = whole cycles
+    for f in CARD_MULTIBURST:
+        n = np.arange(burst_px)
+        v[start:start + burst_px] = ped + amp * np.sin(2.0 * np.pi * f * n / fs)
+        start += slot
+
+    Y = np.clip(np.round(make_its.to_luma(v)), 16, 235).astype(np.uint8)
     lines = np.zeros((ACTIVE_ROWS, SCREEN_W * 2), np.uint8)
     lines[:, 1::2] = Y[None, :]
-    lines[:, 0::4] = 128  # monochrome
+    lines[:, 0::4] = 128                   # monochrome
     lines[:, 2::4] = 128
     return lines, 0
 
@@ -394,7 +412,8 @@ def convert(name, cfg):
     if cfg.get("source") == "computed":
         f, pad = build_frame_multiburst()
         frames.append(f)
-        print("  computed: %s" % ", ".join("%g MHz" % m for m in MULTIBURST_MHZ))
+        print("  computed: full-field multiburst, bursts %s MHz"
+              % ", ".join("%g" % f_ for f_ in CARD_MULTIBURST))
     elif cfg.get("source") == "tiff":
         for b in cfg["files"]:
             f, pad = build_frame_tiff(b, cfg["levels"], cfg["levels_chroma"],

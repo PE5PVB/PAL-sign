@@ -1,9 +1,10 @@
-// Multiburst: a black and white reference block, then six bursts of
-// sine at rising frequency (0.5/1/2/3/4/4.8 MHz) at the same amplitude,
-// showing the chain's frequency response at a glance (PAL B/G passes
-// 5 MHz, so the last burst should just about survive). Every row is
-// identical, computed rather than scanned; see
-// build_frame_multiburst() in tools/convert_rom_pattern.py.
+// Multiburst: a full-field PAL multiburst. A black (0 V) and a white
+// (0.7 V) reference bar, then six bursts on a 50% pedestal at
+// 0.5/1.5/2.5/3.5/4.5/5.5 MHz, full amplitude so the peaks reach white
+// and the troughs reach black; the white bar is the amplitude
+// reference. Every row is identical. The inserted ITS line 18 keeps
+// its own J.63 signal; see build_frame_multiburst() in
+// tools/convert_rom_pattern.py.
 #include "multiburst_data.h"
 #include "../language.h"
 #include "../pattern.h"

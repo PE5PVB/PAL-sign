@@ -2,14 +2,14 @@
 //
 // Multiburst
 // Variants: -
-//   test signal: white reference plus six frequency packets
+//   test signal: full-field PAL multiburst (pedestal, C1 bar, 0.5-5.5 MHz bursts)
 #pragma once
 
 #include <stdint.h>
 
 static const int MULTIBURST_UNIQUE_LINES = 1;
-static const int MULTIBURST_RUN_COUNT = 297;
-static const int MULTIBURST_PAL_SIZE = 165;
+static const int MULTIBURST_RUN_COUNT = 258;
+static const int MULTIBURST_PAL_SIZE = 135;
 
 // The picture sits centred in the 720 samples that BT.656 carries, with
 // 0 black samples in front of it on every line. Written down here as a

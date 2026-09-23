@@ -29,8 +29,8 @@ multiburst_line:
 .global multiburst_len
 multiburst_len:
 #include "multiburst_len.inc.h"
-// multiburst_pal.bin: 660 bytes
-// multiburst_idx.bin: 594 bytes
-// multiburst_len.bin: 297 bytes
-// multiburst_start.bin: 8 bytes
-// multiburst_line.bin: 1152 bytes
+// multiburst_pal.inc.h: 1699 bytes
+// multiburst_idx.inc.h: 1361 bytes
+// multiburst_len.inc.h: 805 bytes
+// multiburst_start.inc.h: 112 bytes
+// multiburst_line.inc.h: 1499 bytes
