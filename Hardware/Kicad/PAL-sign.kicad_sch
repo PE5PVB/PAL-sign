@@ -8100,6 +8100,12 @@
 		(uuid "0a9d9d3d-7135-4565-aad6-42527c3d901a")
 	)
 	(junction
+		(at 212.09 116.84)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "0b957ff0-717b-44ba-8eb4-32a03a8e3c09")
+	)
+	(junction
 		(at 152.4 106.68)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -8524,12 +8530,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "de62549c-3a54-4a20-9f8e-04283c44973c")
-	)
-	(junction
-		(at 212.09 116.84)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "de956b7b-0faa-465b-9a5a-97834f8c1b47")
 	)
 	(junction
 		(at 124.46 26.67)
@@ -9766,6 +9766,16 @@
 			(type default)
 		)
 		(uuid "3ed1a701-2873-4111-b8fc-0a926052385b")
+	)
+	(wire
+		(pts
+			(xy 212.09 97.79) (xy 212.09 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4061cc9a-4698-4d2e-bfa2-b6060e77352e")
 	)
 	(wire
 		(pts
@@ -11859,7 +11869,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 91.44) (xy 212.09 101.6)
+			(xy 212.09 91.44) (xy 212.09 92.71)
 		)
 		(stroke
 			(width 0)
@@ -12649,16 +12659,6 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 106.68) (xy 212.09 116.84)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f00d3d04-73a6-4d04-b310-4a13ef7cea32")
-	)
-	(wire
-		(pts
 			(xy 137.16 116.84) (xy 137.16 129.54)
 		)
 		(stroke
@@ -12706,6 +12706,16 @@
 			(type default)
 		)
 		(uuid "f1ace504-7538-498a-bf17-2fa8285a3832")
+	)
+	(wire
+		(pts
+			(xy 212.09 104.14) (xy 212.09 105.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f4109fbf-8f92-4358-bf0b-9684d991e015")
 	)
 	(wire
 		(pts
@@ -12796,6 +12806,16 @@
 			(type default)
 		)
 		(uuid "f813f941-076b-48ae-8ea3-006b23a3f58b")
+	)
+	(wire
+		(pts
+			(xy 212.09 110.49) (xy 212.09 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f88492cb-c707-423d-8906-733f681d0912")
 	)
 	(wire
 		(pts
@@ -16320,6 +16340,98 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:L_Small")
+		(at 212.09 101.6 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "300a2efe-73c3-469b-9824-2ea6fa369051")
+		(property "Reference" "L3"
+			(at 212.852 100.33 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "4.7uH"
+			(at 212.852 102.87 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+			(at 212.09 101.6 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "0805CS-472"
+			(at 212.09 101.6 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Inductor, small symbol"
+			(at 212.09 101.6 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C9900302166 "
+			(at 212.09 101.6 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ab77e451-a393-4a0d-a873-1d93c3c3bb1b")
+		)
+		(pin "2"
+			(uuid "3352b7af-21e4-49c0-9094-b49349590eda")
+		)
+		(instances
+			(project "PAL-sign"
+				(path "/d14260ee-e09c-47d0-8616-c1f67019dae8"
+					(reference "L3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:C_Small")
 		(at 264.16 140.97 90)
 		(unit 1)
@@ -18403,7 +18515,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 212.09 104.14 0)
+		(at 212.09 95.25 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -18413,7 +18525,7 @@
 		(dnp no)
 		(uuid "52dc3fab-1d7a-4296-8a54-0eb6ed6b60e9")
 		(property "Reference" "R15"
-			(at 214.122 102.87 0)
+			(at 214.122 93.98 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -18424,7 +18536,7 @@
 			)
 		)
 		(property "Value" "300"
-			(at 214.122 104.9021 0)
+			(at 214.122 96.0121 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -18435,7 +18547,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18446,7 +18558,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18457,7 +18569,7 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18468,7 +18580,7 @@
 			)
 		)
 		(property "LCSC" "C23025"
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18479,7 +18591,7 @@
 			)
 		)
 		(property "KLC_S3.3" ""
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18490,7 +18602,7 @@
 			)
 		)
 		(property "KLC_S4.1" ""
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18501,7 +18613,7 @@
 			)
 		)
 		(property "KLC_S4.2_DVDD" ""
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18512,7 +18624,7 @@
 			)
 		)
 		(property "KLC_S4.2_VREG_LX" ""
-			(at 212.09 104.14 0)
+			(at 212.09 95.25 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26569,6 +26681,98 @@
 			(project "PAL-sign"
 				(path "/d14260ee-e09c-47d0-8616-c1f67019dae8"
 					(reference "R18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:L_Small")
+		(at 212.09 107.95 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "baf8c6eb-8e54-4e99-aeb2-73fffbac6fdf")
+		(property "Reference" "L4"
+			(at 212.852 106.68 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1.5uH"
+			(at 212.852 109.22 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+			(at 212.09 107.95 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "0805CS-152"
+			(at 212.09 107.95 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Inductor, small symbol"
+			(at 212.09 107.95 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C41336172 "
+			(at 212.09 107.95 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "63dd6ffd-9f57-4c90-991b-4c30fbd0cd09")
+		)
+		(pin "2"
+			(uuid "322f858e-c276-40b9-9a35-d614f8789779")
+		)
+		(instances
+			(project "PAL-sign"
+				(path "/d14260ee-e09c-47d0-8616-c1f67019dae8"
+					(reference "L4")
 					(unit 1)
 				)
 			)

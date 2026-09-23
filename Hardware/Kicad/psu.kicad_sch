@@ -3435,7 +3435,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "17b87c13-c2e0-41a0-bddb-cbc63873a0f1")
-		(property "Reference" "L3"
+		(property "Reference" "L5"
 			(at 109.22 40.894 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3552,7 +3552,7 @@
 		(instances
 			(project "PAL-sign"
 				(path "/5e4b4b86-505e-4573-b1db-0e4430e7f8ee"
-					(reference "L3")
+					(reference "L5")
 					(unit 1)
 				)
 			)
@@ -7175,7 +7175,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "ea463b7f-295e-43bf-af2b-11a9850304fe")
-		(property "Reference" "L4"
+		(property "Reference" "L6"
 			(at 130.81 40.894 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7292,7 +7292,7 @@
 		(instances
 			(project "PAL-sign"
 				(path "/5e4b4b86-505e-4573-b1db-0e4430e7f8ee"
-					(reference "L4")
+					(reference "L6")
 					(unit 1)
 				)
 			)
