@@ -178,6 +178,10 @@ enum {
   CFG_COLOR_SUB,     // the second line
   CFG_COLOR_INSERT,  // the insert boxes: date and time, or the fixed texts
   CFG_COLOR_COUNT,
+  // Two more that belong to the TV clock card alone, so they are kept
+  // once rather than per card; the card argument is ignored for them.
+  CFG_COLOR_CLOCK_FACE = CFG_COLOR_COUNT,  // markers, hands and centre dot
+  CFG_COLOR_CLOCK_BACK,                    // the picture behind it
 };
 uint32_t cfgCardColor(int card, int kind);   // card -1 = the one on screen
 void cfgSetCardColor(int card, int kind, uint32_t rgb);

@@ -71,16 +71,15 @@ struct Pattern {
   // The luma and the rest of the chroma are identical in both frames, so
   // the inversion runs unconditionally over these ranges: outside the
   // bars the chroma is neutral 128 and 256-128 leaves it untouched.
+  // The flip is per frame only, never per line: the bars' own line-by-line
+  // sign change is what makes a delay-line decoder cancel them to grey.
   const PhasePairRange *phaseBars;
   int phaseBarCount;
 
-  // true when the reference bars already carry the +-V PAL-switch
-  // alternation in the pixel data (both PM5644 G00 and G924 do, measured
-  // from the ROM): the phase flip is then XORed with the analogue line
-  // parity so it survives the encoder's own V-switch. false would suit
-  // bars stored as a solid colour, where the encoder makes the alternation
-  // and a plain per-frame flip is right.
-  bool phaseBarsLineComp;
+  // Optional. Work done in the producer's spare time, only while the row
+  // stock is well filled (as the ROM table copy): one bounded piece per
+  // call, returns whether more is waiting.
+  bool (*background)();
 };
 
 // The pattern the video layer is sending out at the moment.
@@ -109,6 +108,7 @@ extern const Pattern PATTERN_MIXEDBAR;    // bars, a black text band, bars in bl
 extern const Pattern PATTERN_PICDREAM;    // bars, a text box, a short multiburst, a ticker band
 extern const Pattern PATTERN_PCMAUDIO;    // Ham PCM: stereo audio as an NRZ bit stream (HQ, LQ, Voice)
 extern const Pattern PATTERN_SONYPCM;     // EIAJ/IEC 60841 PCM (Sony PCM-F1/501ES compatible), 14 or 16 bit
+extern const Pattern PATTERN_TVCLOCK;     // full-picture analogue clock (depips.nl TV Klok)
 
 // Which slot an uploadable card belongs to, or -1 for every other card;
 // the file name of the picture in it. Both live in custom.cpp.

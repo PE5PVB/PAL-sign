@@ -123,4 +123,4 @@ static const PhasePairRange pm5644g00PhaseBars[] = {{16, 34}, {324, 343}};
 const Pattern PATTERN_PM5644G00 = {LANG_CARD_PM5644, pm5644g00Init, pm5644g00RenderRow, pm5644g00Tick,
                                    false, false, pm5644g00Reflow,
                                    nullptr, false, false,
-                                   pm5644g00PhaseBars, 2, true};
+                                   pm5644g00PhaseBars, 2};

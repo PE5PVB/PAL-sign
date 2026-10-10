@@ -101,6 +101,16 @@ bool romCopyStep(uint32_t maxBytes) {
   return romStageNo >= 0;
 }
 
+uint8_t *romBorrowScratch(uint32_t *bytes) {
+  romStageNo = -1;
+  romStageDone = 0;
+  romFromFlash = false;
+  romLines = 0;
+  romLineCacheValid = false;
+  *bytes = sizeof(romIdx);
+  return (uint8_t *)romIdx;
+}
+
 void romCopyPanic(void) {
   if (romStageNo >= 0) romCopyPanicked_ = true;
   romCopyFinish();

@@ -63,6 +63,12 @@ void romCopyPanic(void);
 // boxes.
 void romSetLines(const uint16_t *line);
 
+// Lends the run-index table (the largest, ROM_MAX_RUNS x 2 bytes) to a
+// computed card as working memory while it is the active card: cancels
+// a copy still running, after which no ROM card is loaded; the next
+// romLoad() fills everything again.
+uint8_t *romBorrowScratch(uint32_t *bytes);
+
 // Checks what is really in RAM (finish the copy first): every row adds
 // up to 360 words, no row index points outside the table. Returns the
 // fault count, first case in firstLine/firstSum.

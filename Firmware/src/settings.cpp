@@ -596,9 +596,10 @@ static bool extraValidV3(const ExtraBlock *b) {
 // conversion to YCbCr happens where the lettering is laid out (see
 // yccFromRgb in gfx.h). Order matches the CFG_COLOR_ indices in
 // settings.h. Versions 2-4 track the same card reorders CARD_VERSION
-// did (cardShiftV4, cardOrderV5, cardShiftV7).
+// did (cardShiftV4, cardOrderV5, cardShiftV7); version 5 adds the TV
+// clock's two colours after the cards, versions 1-4 end at the cards.
 static const uint32_t COLOR_MAGIC = 0x524C4F43;  // "COLR"
-static const uint16_t COLOR_VERSION = 4;
+static const uint16_t COLOR_VERSION = 5;
 
 struct CardColors {
   uint8_t rgb[CFG_COLOR_COUNT][3];
@@ -610,16 +611,35 @@ struct ColorBlock {
   uint16_t length;
   uint32_t crc;   // over everything after this field
   CardColors card[CARD_SLOTS];
+  uint8_t clock[2][3];   // CFG_COLOR_CLOCK_FACE, CFG_COLOR_CLOCK_BACK
+  uint8_t spare[2];
 };
 static_assert(sizeof(ColorBlock) <= 3 * PAGINA, "the colours do not fit in three flash pages");
 
-static CardColors colorSet[CARD_SLOTS];
+// Versions 1-4: the same without the clock.
+struct ColorBlockV4 {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t length;
+  uint32_t crc;
+  CardColors card[CARD_SLOTS];
+};
 
-static uint32_t colorCrc(const ColorBlock *b) {
-  const uint8_t *p = (const uint8_t *)b + offsetof(ColorBlock, card);
-  uint32_t n = (uint32_t)(sizeof(ColorBlock) - offsetof(ColorBlock, card));
-  return photoCrc32(p, n, 0xFFFFFFFFu);
+static CardColors colorSet[CARD_SLOTS];
+static uint8_t clockColors[2][3];
+
+// #f2f2f2 on black, as the depips.nl clock.
+static void clockColorsDefault() {
+  memset(clockColors[0], 0xF2, 3);
+  memset(clockColors[1], 0x00, 3);
 }
+
+static uint32_t colorCrcOver(const void *b, uint32_t total) {
+  const uint8_t *p = (const uint8_t *)b + offsetof(ColorBlock, card);
+  return photoCrc32(p, total - (uint32_t)offsetof(ColorBlock, card), 0xFFFFFFFFu);
+}
+
+static uint32_t colorCrc(const ColorBlock *b) { return colorCrcOver(b, sizeof(ColorBlock)); }
 
 static const ColorBlock *colorInFlash() {
   return (const ColorBlock *)(recActive() + 6 * PAGINA);
@@ -632,25 +652,32 @@ static bool colorValid(const ColorBlock *b) {
   return b->crc == colorCrc(b);
 }
 
-static bool colorValidV3(const ColorBlock *b) {
+static bool colorValidV4(const ColorBlockV4 *b) {
+  if (b->magic != COLOR_MAGIC) return false;
+  if (b->version != 4) return false;
+  if (b->length != sizeof(ColorBlockV4)) return false;
+  return b->crc == colorCrcOver(b, sizeof(ColorBlockV4));
+}
+
+static bool colorValidV3(const ColorBlockV4 *b) {
   if (b->magic != COLOR_MAGIC) return false;
   if (b->version != 3) return false;
-  if (b->length != sizeof(ColorBlock)) return false;
-  return b->crc == colorCrc(b);
+  if (b->length != sizeof(ColorBlockV4)) return false;
+  return b->crc == colorCrcOver(b, sizeof(ColorBlockV4));
 }
 
-static bool colorValidV2(const ColorBlock *b) {
+static bool colorValidV2(const ColorBlockV4 *b) {
   if (b->magic != COLOR_MAGIC) return false;
   if (b->version != 2) return false;
-  if (b->length != sizeof(ColorBlock)) return false;
-  return b->crc == colorCrc(b);
+  if (b->length != sizeof(ColorBlockV4)) return false;
+  return b->crc == colorCrcOver(b, sizeof(ColorBlockV4));
 }
 
-static bool colorValidV1(const ColorBlock *b) {
+static bool colorValidV1(const ColorBlockV4 *b) {
   if (b->magic != COLOR_MAGIC) return false;
   if (b->version != 1) return false;
-  if (b->length != sizeof(ColorBlock)) return false;
-  return b->crc == colorCrc(b);
+  if (b->length != sizeof(ColorBlockV4)) return false;
+  return b->crc == colorCrcOver(b, sizeof(ColorBlockV4));
 }
 
 // Pages nine to eleven: the teletext page, three pages of their own
@@ -972,14 +999,23 @@ void cfgSetCardTickerY(int card, int y) {
 // The colours of the lettering, four per card; see the enum in
 // settings.h for which is which.
 uint32_t cfgCardColor(int card, int kind) {
+  if (kind == CFG_COLOR_CLOCK_FACE || kind == CFG_COLOR_CLOCK_BACK) {
+    const uint8_t *c = clockColors[kind - CFG_COLOR_CLOCK_FACE];
+    return ((uint32_t)c[0] << 16) | ((uint32_t)c[1] << 8) | c[2];
+  }
   if (kind < 0 || kind >= CFG_COLOR_COUNT) return 0xFFFFFFu;
   const uint8_t *c = colorSet[cardIndex(card)].rgb[kind];
   return ((uint32_t)c[0] << 16) | ((uint32_t)c[1] << 8) | c[2];
 }
 
 void cfgSetCardColor(int card, int kind, uint32_t rgb) {
-  if (kind < 0 || kind >= CFG_COLOR_COUNT) return;
-  uint8_t *c = colorSet[cardIndex(card)].rgb[kind];
+  uint8_t *c;
+  if (kind == CFG_COLOR_CLOCK_FACE || kind == CFG_COLOR_CLOCK_BACK) {
+    c = clockColors[kind - CFG_COLOR_CLOCK_FACE];
+  } else {
+    if (kind < 0 || kind >= CFG_COLOR_COUNT) return;
+    c = colorSet[cardIndex(card)].rgb[kind];
+  }
   const uint8_t r = (uint8_t)(rgb >> 16), g = (uint8_t)(rgb >> 8), b = (uint8_t)rgb;
   if (c[0] == r && c[1] == g && c[2] == b) return;
   c[0] = r;
@@ -1399,6 +1435,7 @@ static void zetFabriek() {
   tickerTextBuf[CFG_TICKER_MAX] = 0;
   memset(teletextRows, 0, sizeof(teletextRows));   // empty: teletext.cpp's own default page stands
   memset(colorSet, 0xFF, sizeof(colorSet));   // all white: 255,255,255 everywhere
+  clockColorsDefault();
   strncpy(insertLeft, CFG_TEXT_INSERT_LEFT, TEXT_MAX - 1);
   insertLeft[TEXT_MAX - 1] = 0;
   strncpy(insertRight, CFG_TEXT_INSERT_RIGHT, TEXT_MAX - 1);
@@ -1519,29 +1556,35 @@ void cfgInit() {
   }
 
   const ColorBlock *cb = colorInFlash();
+  const ColorBlockV4 *cb4 = (const ColorBlockV4 *)cb;
   if (colorValid(cb)) {
     memcpy(colorSet, cb->card, sizeof(colorSet));
-  } else if (colorValidV3(cb)) {
+    memcpy(clockColors, cb->clock, sizeof(clockColors));
+  } else if (colorValidV4(cb4)) {
+    // From before the TV clock's own colours: the cards carry across
+    // as they are, the clock starts at its defaults.
+    memcpy(colorSet, cb4->card, sizeof(colorSet));
+  } else if (colorValidV3(cb4)) {
     // From before Crosshatch entered right after Multiburst: the
     // colours belong to card positions, so they take the card records'
     // newest reorder.
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      colorSet[cardShiftV7((uint8_t)i)] = cb->card[i];
+      colorSet[cardShiftV7((uint8_t)i)] = cb4->card[i];
     }
-  } else if (colorValidV2(cb)) {
+  } else if (colorValidV2(cb4)) {
     // From before Mixed bars and Picdream moved to right after TVE: the
     // colours belong to card positions, so they take the card records'
     // reorder.
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      colorSet[cardShiftV7(cardOrderV5((uint8_t)i))] = cb->card[i];
+      colorSet[cardShiftV7(cardOrderV5((uint8_t)i))] = cb4->card[i];
     }
-  } else if (colorValidV1(cb)) {
+  } else if (colorValidV1(cb4)) {
     // From before the Mixed bars card: the same shift as the card
     // records, then the same reorders as the branches above. Two
     // shifts chain here, so this loop stops a slot earlier; see the
     // same note at the CARD_VERSION 4 branch above.
     for (int i = 0; i < CARD_SLOTS - 2; i++) {
-      colorSet[cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i)))] = cb->card[i];
+      colorSet[cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i)))] = cb4->card[i];
     }
   } else if (tickValid(tk) || tickValidV5((const TickerBlockV5 *)tk)) {
     // A record from the one build with a single global ticker colour:
@@ -1691,6 +1734,7 @@ static void fillPages(uint8_t *page) {
   col.version = COLOR_VERSION;
   col.length = sizeof(col);
   memcpy(col.card, colorSet, sizeof(col.card));
+  memcpy(col.clock, clockColors, sizeof(col.clock));
   col.crc = colorCrc(&col);
 
   TeletextBlock tt;

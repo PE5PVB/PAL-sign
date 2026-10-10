@@ -183,14 +183,11 @@ void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
     patternRenderRow(p, y);
     if (!activePattern->keepEdges) blankEdges(p);
     displaySampleRow(p, y, videoDisplaySample);   // must run even with no time to spare
-    // Second PAL phase frame: invert the reference bars' chroma about 128.
-    // The PM5644 bars (G00 and G924 alike, measured from the ROM) carry the
-    // +-V alternation in the pixel data, so XOR with the line parity to
-    // survive the encoder's V-switch: without it the two interlaced fields
-    // cancel and the 25 Hz blink vanishes. phaseBarsLineComp is the card's
-    // say; a card storing solid bars would set it false for a plain flip.
-    bool phase = videoPhaseFrame ^ (activePattern->phaseBarsLineComp && ((int)line & 1));
-    if (phase && activePattern->phaseBars) {
+    // Second PAL phase frame: invert the reference bars' chroma about 128,
+    // the whole frame alike. The bars change sign every line in the pixel
+    // data; a delay-line decoder cancels that to grey, so the inversion
+    // must not depend on the line or the bars turn into plain colour.
+    if (videoPhaseFrame && activePattern->phaseBars) {
       // Hoisted into locals: the byte stores to p could alias the Pattern
       // as far as the compiler knows, which forced a reload of first/last
       // and the table pointer on every pair.

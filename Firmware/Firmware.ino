@@ -87,7 +87,7 @@ static const Pattern *const PATTERNS[] = {
     &PATTERN_CUSTOM4,      &PATTERN_CUSTOM5,    &PATTERN_CUSTOM6,    &PATTERN_CUSTOM7,
     &PATTERN_CUSTOM8,      &PATTERN_CUSTOM9,    &PATTERN_CUSTOM10,   &PATTERN_CUSTOM11,
     &PATTERN_CUSTOM12,     &PATTERN_CUSTOM13,   &PATTERN_CUSTOM14,
-    &PATTERN_PCMAUDIO, &PATTERN_SONYPCM};
+    &PATTERN_PCMAUDIO, &PATTERN_SONYPCM, &PATTERN_TVCLOCK};
 static const int PATTERN_COUNT = (int)(sizeof(PATTERNS) / sizeof(PATTERNS[0]));
 
 // The worst row build time since the last timing report; see the
@@ -1262,6 +1262,12 @@ static uint32_t cardCrcForPc(int i) {
   uint32_t crc = cfgCardCrc(i);
   const int slot = customSlotOf(PATTERNS[i]);
   if (slot >= 0 && photoValid(slot)) crc ^= photoHeader(slot)->crc;
+  // The TV clock's two colours are kept once, outside the card record
+  // cfgCardCrc() covers.
+  if (PATTERNS[i] == &PATTERN_TVCLOCK) {
+    crc ^= cfgCardColor(i, CFG_COLOR_CLOCK_FACE) * 0x9E3779B1u;
+    crc ^= cfgCardColor(i, CFG_COLOR_CLOCK_BACK) * 0x85EBCA77u;
+  }
   return crc;
 }
 
@@ -1359,7 +1365,9 @@ static void printSettings() {
     const uint32_t crc = cardCrcForPc(i);
     // 1: PM5644 16:9 chroma bars, 2: AP1/AP2 on Card G, 3: contest,
     // 4: BBC Test Card F/W's own photo switch, 5: the Sony PCM card's
-    // 16 bit and pre-emphasis switches (its "option" bits 0 and 1).
+    // 16 bit and pre-emphasis switches (its "option" bits 0 and 1),
+    // 6: Ham PCM's quality, 7: the TV clock (option bit 0: text at the
+    // bottom; facecolor/backcolor).
     // Not a CARD_TRAIT bit, that byte is full; checked by pattern
     // identity instead.
     const uint8_t tr = cfgCardTraits(i);
@@ -1369,6 +1377,7 @@ static void printSettings() {
                   : (PATTERNS[i] == &PATTERN_TESTCARDF || PATTERNS[i] == &PATTERN_TESTCARDW) ? 4
                   : (PATTERNS[i] == &PATTERN_SONYPCM) ? 5
                   : (PATTERNS[i] == &PATTERN_PCMAUDIO) ? 6
+                  : (PATTERNS[i] == &PATTERN_TVCLOCK) ? 7
                                               : 0;
     // An empty photograph slot always reads as switched off; see
     // cardIsEnabled().
@@ -1385,7 +1394,9 @@ static void printSettings() {
             (unsigned long)cfgCardColor(i, CFG_COLOR_TICKER),
             (unsigned long)cfgCardColor(i, CFG_COLOR_ID),
             (unsigned long)cfgCardColor(i, CFG_COLOR_SUB),
-            (unsigned long)cfgCardColor(i, CFG_COLOR_INSERT), (unsigned long)crc);
+            (unsigned long)cfgCardColor(i, CFG_COLOR_INSERT),
+            (unsigned long)cfgCardColor(i, CFG_COLOR_CLOCK_FACE),
+            (unsigned long)cfgCardColor(i, CFG_COLOR_CLOCK_BACK), (unsigned long)crc);
     // An uploadable slot goes by what is in it, its file name, not
     // "Custom 7"; an empty one reads as empty.
     if (slot >= 0) {
@@ -1511,7 +1522,10 @@ static void setSettingFromCommand(const char *line) {
       // (pre-emphasis) in its init(), so a change goes through a fresh
       // init, the same take-up as aspect/insert.
       cfgSetCardOption(card, num);
-      needsInit = true;
+      // The TV clock only moves its text (bit 0): its reflow does that
+      // without drawing the clock face again.
+      if (PATTERNS[card] == &PATTERN_TVCLOCK) needsText = true;
+      else needsInit = true;
     } else if (!strcmp(field, "customphoto")) {
       // BBC Test Card F/W only; refused elsewhere, the same rule as
       // "moving" above, so a setting that could never show anything
@@ -1536,11 +1550,16 @@ static void setSettingFromCommand(const char *line) {
       // a picture somebody is looking at decides for them.
       cfgSetCardEnabled(card, num != 0);
     } else if (!strcmp(field, "tickercolor") || !strcmp(field, "idcolor") ||
-               !strcmp(field, "subcolor") || !strcmp(field, "inscolor")) {
+               !strcmp(field, "subcolor") || !strcmp(field, "inscolor") ||
+               !strcmp(field, "facecolor") || !strcmp(field, "backcolor")) {
       // Six hex digits, RRGGBB, exactly what the card dump sends out.
+      // facecolor/backcolor are the TV clock's own; the card picks a
+      // change up itself, once a picture.
       const int kind = !strcmp(field, "tickercolor") ? CFG_COLOR_TICKER
                      : !strcmp(field, "idcolor")     ? CFG_COLOR_ID
                      : !strcmp(field, "subcolor")    ? CFG_COLOR_SUB
+                     : !strcmp(field, "facecolor")   ? CFG_COLOR_CLOCK_FACE
+                     : !strcmp(field, "backcolor")   ? CFG_COLOR_CLOCK_BACK
                                                      : CFG_COLOR_INSERT;
       cfgSetCardColor(card, kind, (uint32_t)strtoul(val, nullptr, 16) & 0xFFFFFFu);
       // The ticker ink and its lut are worked out in the band layout;
@@ -2610,7 +2629,7 @@ struct CardColorChoice {
 static const CardColorChoice CARD_COLORS[] = {
     {LANG_COLOR_WHITE, 0xFFFFFFu},   {LANG_COLOR_YELLOW, 0xFFFF00u}, {LANG_COLOR_CYAN, 0x00FFFFu},
     {LANG_COLOR_GREEN, 0x00FF00u},   {LANG_COLOR_MAGENTA, 0xFF00FFu}, {LANG_COLOR_RED, 0xFF0000u},
-    {LANG_COLOR_BLUE, 0x0000FFu},
+    {LANG_COLOR_BLUE, 0x0000FFu},    {LANG_COLOR_BLACK, 0x000000u},
 };
 static const int CARD_COLOR_COUNT = sizeof(CARD_COLORS) / sizeof(CARD_COLORS[0]);
 
@@ -2650,7 +2669,7 @@ static int cardColorIndexOf(int kind) {
   for (int i = 0; i < CARD_COLOR_COUNT; i++) {
     if (CARD_COLORS[i].rgb == rgb) return i;
   }
-  return 0;   // not one of the seven: falls back to White
+  return 0;   // not one of the eight: falls back to White
 }
 static void cardColorSetKind(int kind, int idx) {
   if (idx < 0 || idx >= CARD_COLOR_COUNT) return;
@@ -2764,6 +2783,18 @@ static const char *cmHamQualityName(int i) {
   return i == 1 ? LANG_HAM_LQ : i == 2 ? LANG_HAM_VOICE : i == 3 ? LANG_HAM_NARROW : LANG_HAM_HQ;
 }
 static void cmPcmTextSet(const char *s) { cfgSetPcmText(s); }
+// The TV clock: text top or bottom right (option bit 0), and its own
+// two colours, which the card picks up itself once a picture.
+static int cmClockTextIdx() { return cfgCardOption(cardMenuCard) & 1; }
+static void cmClockTextSet(int i) {
+  cfgSetCardOption(cardMenuCard, (cfgCardOption(cardMenuCard) & ~1) | (i & 1));
+  if (cardMenuCard == patternIndex) cfgReloadText();
+}
+static const char *cmClockTextName(int i) { return i ? LANG_BOTTOM_RIGHT : LANG_TOP_RIGHT; }
+static int cmClockFaceIdx() { return cardColorIndexOf(CFG_COLOR_CLOCK_FACE); }
+static void cmClockFaceSet(int i) { cardColorSetKind(CFG_COLOR_CLOCK_FACE, i); }
+static int cmClockBackIdx() { return cardColorIndexOf(CFG_COLOR_CLOCK_BACK); }
+static void cmClockBackSet(int i) { cardColorSetKind(CFG_COLOR_CLOCK_BACK, i); }
 static const char *cmContest1Get() { return cfgContestText1(); }
 static void cmContest1Set(const char *s) { cfgSetContestText1(s); }
 static const char *cmContest2Get() { return cfgContestText2(); }
@@ -2938,6 +2969,11 @@ static void cardMenuBuild() {
     cmAddCycle(LANG_RESOLUTION, cmPcmBitsIdx, cmPcmBitsSet, 2, cmPcmBitsName);
     cmAddToggle(LANG_PRE_EMPHASIS, cmPcmEmphGet, cmPcmEmphSet);
     cmAddToggle(LANG_CTRL_IN_PICTURE, cmPcmPicGet, cmPcmPicSet);
+  }
+  if (PATTERNS[cardMenuCard] == &PATTERN_TVCLOCK) {
+    cmAddCycle(LANG_TEXT_POSITION, cmClockTextIdx, cmClockTextSet, 2, cmClockTextName);
+    cmAddCycle(LANG_CLOCK_COLOUR, cmClockFaceIdx, cmClockFaceSet, CARD_COLOR_COUNT, cardColorName);
+    cmAddCycle(LANG_BACKGROUND_COLOUR, cmClockBackIdx, cmClockBackSet, CARD_COLOR_COUNT, cardColorName);
   }
   if (PATTERNS[cardMenuCard] == &PATTERN_PCMAUDIO) {
     cmAddCycle(LANG_HAM_QUALITY, cmHamQualityIdx, cmHamQualitySet, 4, cmHamQualityName);
@@ -3495,8 +3531,9 @@ void videoFrameHook() {
   // PAL phase-frame selection for a two-frame card (PM5644), locked to the
   // encoder's own 8-field counter (0xBB) so the ROM frame stays in step
   // with the ADV's field sequence. Bit 1 of the counter changes once per
-  // frame (25 Hz); a still card has no phaseBars and ignores the flag.
-  videoSetPhaseFrame((advReadFieldCount() >> 1) & 1);
+  // frame (25 Hz). Only read for such a card: at 100 kHz the I2C read
+  // takes core0 some 0.4 ms, about six rows of production, every frame.
+  if (activePattern->phaseBars) videoSetPhaseFrame((advReadFieldCount() >> 1) & 1);
 
   // The row-counter wrap guard, first half; see VIDEO_RENORM_STEP in
   // videoloop.h. Core1 answers within a row (its videoLoadLine runs
@@ -4011,7 +4048,7 @@ void setup() {
   for (int i = 0; i < PATTERN_COUNT; i++) {
     uint8_t t = 0;
     if (PATTERNS[i] == &PATTERN_CONTEST) t |= CARD_TRAIT_CONTEST;
-    // The twelve that draw the identification: also observed through
+    // The fifteen that draw the identification: also observed through
     // cfgTextIdShown() while a card lays itself out, which wins where
     // there is one; written out here too since a never-shown card has
     // nothing to observe. cfgSetActiveCard() complains if this list is wrong.
@@ -4021,15 +4058,16 @@ void setup() {
         PATTERNS[i] == &PATTERN_TESTCARDW || PATTERNS[i] == &PATTERN_TVE ||
         PATTERNS[i] == &PATTERN_TESTCARDG || PATTERNS[i] == &PATTERN_EBUBW ||
         PATTERNS[i] == &PATTERN_BARSRED || PATTERNS[i] == &PATTERN_MIXEDBAR ||
-        PATTERNS[i] == &PATTERN_PICDREAM || PATTERNS[i] == &PATTERN_PCMAUDIO)
+        PATTERNS[i] == &PATTERN_PICDREAM || PATTERNS[i] == &PATTERN_PCMAUDIO ||
+        PATTERNS[i] == &PATTERN_TVCLOCK)
       t |= CARD_TRAIT_ID;
-    // THE EIGHT THAT DRAW THE SECOND TEXT LINE, found the same way:
+    // THE TEN THAT DRAW THE SECOND TEXT LINE, found the same way:
     // grep -l cfgTextSubShown src/testcards/*.cpp
     if (PATTERNS[i] == &PATTERN_PM5644G00 || PATTERNS[i] == &PATTERN_PM5644G924 ||
         PATTERNS[i] == &PATTERN_FUBK4X3 || PATTERNS[i] == &PATTERN_FUBK16X9 ||
         PATTERNS[i] == &PATTERN_TESTCARDG || PATTERNS[i] == &PATTERN_TVE ||
         PATTERNS[i] == &PATTERN_EBUBW || PATTERNS[i] == &PATTERN_BARSRED ||
-        PATTERNS[i] == &PATTERN_PCMAUDIO)
+        PATTERNS[i] == &PATTERN_PCMAUDIO || PATTERNS[i] == &PATTERN_TVCLOCK)
       t |= CARD_TRAIT_SUB;
     // THE THREE THAT DRAW THE INSERT BOXES, found the same way:
     // grep -l insertPrepare src/testcards/*.cpp
@@ -4366,6 +4404,14 @@ void loop() {
       while ((int32_t)(videoProducedCount - videoConsumedCount) > VIDEO_ROM_COPY_KEEP_ROWS) {
         if (!romCopyStep(VIDEO_ROM_COPY_CHUNK)) break;
       }
+    }
+  }
+
+  // A card's own spare-time work (the TV clock's next picture), by the
+  // same rule as the table copy above.
+  if (noCardChange && activePattern->background) {
+    while ((int32_t)(videoProducedCount - videoConsumedCount) > VIDEO_ROM_COPY_KEEP_ROWS) {
+      if (!activePattern->background()) break;
     }
   }
 
