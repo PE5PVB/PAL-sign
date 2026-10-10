@@ -242,6 +242,21 @@ public static class UiText
     public const string TeletextDialogHint =
         "40 characters per row. A row left blank keeps the board's own default page.";
     public const string TeletextSavingText = "Writing the teletext page to board";
+    public const string TeletextImportFile = "Import file...";
+    public const string TeletextImportLink = "Import link...";
+    public const string TipTeletextImportFile =
+        "A page made in a teletext editor such as the zxnet editor or edit.tf, saved as .tti, .t42 or .bin. " +
+        "Rows 1 to 15 of the page fill the board's 15 rows.";
+    public const string TipTeletextImportLink =
+        "Paste the link of a page from edit.tf or the zxnet editor (the part after # holds the page).";
+    public const string TeletextImportFilter =
+        "Teletext pages (*.tti;*.ttix;*.t42;*.bin;*.txt)|*.tti;*.ttix;*.t42;*.bin;*.txt|All files (*.*)|*.*";
+    public const string TeletextLinkPrompt = "Link of the page (edit.tf or zxnet editor):";
+    public const string TeletextImportNothing = "No teletext page found in that.";
+    public const string TeletextImportDropped =
+        "The board sends {0} rows; rows {1} and below of this page are left out.";
+    public const string TeletextMakeText = "Make this a text row (drops the graphics)";
+    public const string TipTeletextPreview = "The page as a television shows it.";
     public const string ItsSwitch = "Insertion test signals on 17, 18, 330, 331";
     public const string VbiSwitch = "Blanking open (without this the two above go nowhere)";
     public const string SlideFadeSwitch = "Fade between slides (off cuts straight to black and back)";

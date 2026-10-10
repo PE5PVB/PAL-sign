@@ -125,6 +125,37 @@ public class BoardSettings
     // based here). An empty row means untouched: the board falls back
     // to its own built-in default page for that row.
     public string[] TeletextRows = Array.Empty<string>();
+
+    /// <summary>A teletext row as the board sends it: plain text, or "~"
+    /// and two hex digits a byte when the row holds codes plain text
+    /// cannot carry over the serial line (0x00, 0x0A, 0x0D, 0x1B) or block
+    /// graphics. Returned as one char per byte, 0x00..0x7F.</summary>
+    public static string TeletextFromWire(string v)
+    {
+        if (v.Length < 1 || v[0] != '~' || (v.Length - 1) % 2 != 0) return v;
+        var sb = new System.Text.StringBuilder((v.Length - 1) / 2);
+        for (int i = 1; i + 1 < v.Length; i += 2)
+        {
+            if (!byte.TryParse(v.AsSpan(i, 2), System.Globalization.NumberStyles.HexNumber,
+                               System.Globalization.CultureInfo.InvariantCulture, out byte b) || b > 0x7F)
+                return v;
+            sb.Append((char)b);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>The other way: plain text where that is safe (what an
+    /// older board understands), the hex form otherwise.</summary>
+    public static string TeletextToWire(string row)
+    {
+        bool plain = row.Length == 0 || row[0] != '~';
+        foreach (char ch in row)
+            if (!((ch >= 1 && ch <= 7) || (ch >= 0x20 && ch <= 0x7E))) { plain = false; break; }
+        if (plain) return row;
+        var sb = new System.Text.StringBuilder(1 + 2 * row.Length).Append('~');
+        foreach (char ch in row) sb.Append(((int)ch & 0x7F).ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+        return sb.ToString();
+    }
     public int ContestNr, Luma, Chroma, CurrentCard;
 
     // Kept in flash beside the card, so a running show resumes by itself
@@ -235,7 +266,7 @@ public static class BoardConfig
         {
             if (int.TryParse(name.AsSpan(9), out int row) &&
                 row >= 1 && row <= s.TeletextRows.Length)
-                s.TeletextRows[row - 1] = value;
+                s.TeletextRows[row - 1] = BoardSettings.TeletextFromWire(value);
             return;
         }
 

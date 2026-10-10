@@ -33,11 +33,35 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--layout") return Layout(args);
         if (args.Length > 0 && args[0] == "--preview") return Preview(args);
         if (args.Length > 0 && args[0] == "--screenshot") return Screenshot(args);
+        if (args.Length > 0 && args[0] == "--ttimport") return TtImport(args);
 
         ApplicationConfiguration.Initialize();
         Application.Run(new MainWindow());
         // Only reached on a real window close, not the headless modes above.
         Trace.Clear();
+        return 0;
+    }
+
+    // --ttimport <file or link> <out.png> [rows.txt]: reads a teletext
+    // page the way the editor's Import does, draws it with the preview's
+    // renderer and writes the rows as hex, to check the readers against
+    // pages made by other editors without a board or a window.
+    private static int TtImport(string[] args)
+    {
+        if (args.Length < 3) { Console.Error.WriteLine("--ttimport <file or link> <out.png> [rows.txt]"); return 2; }
+        string[]? page = System.IO.File.Exists(args[1]) ? TeletextPage.FromFile(args[1]) : TeletextPage.FromLink(args[1]);
+        if (page == null) { Console.Error.WriteLine("no page"); return 1; }
+        using (var bmp = TeletextRender.Render(page)) bmp.Save(args[2], System.Drawing.Imaging.ImageFormat.Png);
+        if (args.Length > 3)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (string row in page)
+            {
+                foreach (char ch in row) sb.Append(((int)ch).ToString("X2"));
+                sb.AppendLine();
+            }
+            System.IO.File.WriteAllText(args[3], sb.ToString());
+        }
         return 0;
     }
 

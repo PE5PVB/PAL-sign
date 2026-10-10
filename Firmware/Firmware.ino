@@ -1254,6 +1254,54 @@ static void cfgLineText(const char *name, const char *value) {
   Serial.println(value);
 }
 
+// A teletext row over the command line. Plain text cannot carry every
+// code a page may hold: 0x0A and 0x0D (end box, double height) end the
+// line, 0x1B (ESC) cancels it, and 0x00 ends a C string. So a row can
+// also travel as "~" and two hex digits a byte, 0x00..0x7F, which the
+// block graphics (mosaic codes 0x10..0x1F and their sixel characters)
+// need anyway. The stored setting keeps 0x00 as 0x80: it is a C string,
+// and the packet sends only the low seven bits (oneven() in teletext.cpp).
+static int hexDigit(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// False when v is not that form (plain text then, as before).
+static bool teletextFromHex(const char *v, char *out, int outSize) {
+  if (v[0] != '~') return false;
+  const int len = (int)strlen(v + 1);
+  if (len % 2 || len / 2 >= outSize) return false;
+  for (int i = 0; i < len / 2; i++) {
+    const int hi = hexDigit(v[1 + 2 * i]), lo = hexDigit(v[2 + 2 * i]);
+    if (hi < 0 || lo < 0 || hi > 7) return false;
+    const int b = hi * 16 + lo;
+    out[i] = (char)(b ? b : 0x80);
+  }
+  out[len / 2] = 0;
+  return true;
+}
+
+// The readback: plain where plain text is safe (as older PC tools
+// expect), the hex form otherwise.
+static void cfgLineTeletext(const char *name, const char *row) {
+  bool plain = row[0] != '~';
+  for (const char *p = row; *p && plain; p++) {
+    const uint8_t b = (uint8_t)*p;
+    if (!((b >= 1 && b <= 7) || (b >= 0x20 && b <= 0x7E))) plain = false;
+  }
+  if (plain) {
+    cfgLineText(name, row);
+    return;
+  }
+  Serial.print(LANG_CFG);
+  Serial.print(name);
+  Serial.print(" ~");
+  for (const char *p = row; *p; p++) Serial.printf("%02X", (uint8_t)*p & 0x7F);
+  Serial.println();
+}
+
 // What the PC keeps a picture under: cfgCardCrc() only covers what the
 // settings change about a card, so the slot's own checksum is mixed in
 // here too. Used by the dump and by a card-scoped set's answer, which
@@ -1299,7 +1347,7 @@ static void printSettings() {
     // PC tool's editor opens on what is actually on screen.
     char txt[TT_COLS + 1];
     teletextRowText(r, txt, sizeof(txt));
-    cfgLineText(nm, txt);
+    cfgLineTeletext(nm, txt);
   }
   cfgLine(LANG_CFG_CONTESTNR_D, cfgContestNumber());
   cfgLine(LANG_CFG_TELETEXT_D, teletextOn() ? 1 : 0);
@@ -1631,15 +1679,17 @@ static void setSettingFromCommand(const char *line) {
     return;
   }
 
-  // A teletext row by number, 1..TT_ROWS: teletext.3=some text. An
-  // empty value clears the row back to the built-in default page.
+  // A teletext row by number, 1..TT_ROWS: teletext.3=some text, or
+  // teletext.3=~<hex> for any byte (see teletextFromHex()). An empty
+  // value clears the row back to the built-in default page.
   if (!strncmp(name, "teletext.", 9)) {
     const int row = atoi(name + 9);
     if (row < 1 || row > TT_ROWS) {
       Serial.println(LANG_CFG_FAILED_NO_SUCH_TELETEXT);
       return;
     }
-    cfgSetTeletextRow(row, val);
+    char raw[TT_COLS + 1];
+    cfgSetTeletextRow(row, teletextFromHex(val, raw, sizeof(raw)) ? raw : val);
     teletextApplyRow(row);
     teletextRerasterRow(row);   // the waveform too, or the edit only airs after a reboot
     cfgLine(LANG_CFG_SET_S, name);

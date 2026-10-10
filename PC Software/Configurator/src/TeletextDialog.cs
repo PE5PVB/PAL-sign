@@ -25,6 +25,15 @@
 // end of the string there and silently truncate the rest of the row.
 // Every other alpha code (1..7) is a normal non-zero byte and carries
 // through untouched.
+//
+// BLOCK GRAPHICS are not drawn here but brought in from a real teletext
+// editor (Import, see TeletextPage.cs): edit.tf, the zxnet editor, a
+// .tti/.t42/.bin file. A row that holds anything beyond text and the
+// seven alpha colours is a graphics row: kept byte for byte, shown
+// greyed and read-only, its context menu turns it back into plain text.
+// Such rows go to the board in the "~hex" form (BoardSettings.
+// TeletextToWire()). The preview on the right shows the page as a
+// decoder draws it (TeletextRender.cs).
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -60,6 +69,10 @@ public class TeletextDialog : Form
     private readonly RichTextBox[] _rows;
     private readonly string[] _original;
     private RichTextBox? _active;
+    // A graphics row's bytes, or null for an editable text row.
+    private readonly string?[] _raw;
+    private readonly PictureBox _preview = new() { SizeMode = PictureBoxSizeMode.Zoom };
+    private bool _filling;
 
     /// <summary>What actually went to the board, filled in once Save
     /// succeeds; the caller mirrors it into its own BoardSettings.</summary>
@@ -70,6 +83,7 @@ public class TeletextDialog : Form
         _port = port;
         _original = (string[])rows.Clone();
         _rows = new RichTextBox[rows.Length];
+        _raw = new string?[rows.Length];
 
         Text = UiText.TeletextDialogTitle;
         StartPosition = FormStartPosition.CenterParent;
@@ -127,6 +141,16 @@ public class TeletextDialog : Form
         };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
+        var importFile = new Button { Text = UiText.TeletextImportFile, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        var importLink = new Button { Text = UiText.TeletextImportLink, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        Theme.StyleButton(importFile);
+        Theme.StyleButton(importLink);
+        tips.SetToolTip(importFile, UiText.TipTeletextImportFile);
+        tips.SetToolTip(importLink, UiText.TipTeletextImportLink);
+        importFile.Click += (_, __) => ImportFile();
+        importLink.Click += (_, __) => ImportLink();
+        buttons.Controls.Add(importLink);
+        buttons.Controls.Add(importFile);
 
         var screen = new Panel
         {
@@ -146,7 +170,13 @@ public class TeletextDialog : Form
                 WordWrap = false, ScrollBars = RichTextBoxScrollBars.None,
                 DetectUrls = false, ShortcutsEnabled = true,
             };
-            Decode(box, rows[i]);
+            int idx = i;
+            var menu = new ContextMenuStrip();
+            menu.Items.Add(UiText.TeletextMakeText, null, (_, __) => MakeText(idx));
+            box.ContextMenuStrip = menu;
+            menu.Opening += (_, e) => e.Cancel = _raw[idx] == null;
+            _rows[i] = box;
+            SetRow(i, rows[i]);
             box.Enter += (_, __) => _active = box;
             int next = i + 1;
             box.KeyDown += (_, e) =>
@@ -155,20 +185,35 @@ public class TeletextDialog : Form
                 e.SuppressKeyPress = true;   // no newline, no jump to Save
                 if (next < _rows.Length) _rows[next].Focus(); else save.Focus();
             };
-            box.TextChanged += (_, __) => EnforceBudget(box);
-            _rows[i] = box;
+            box.TextChanged += (_, __) => { if (_raw[idx] == null) EnforceBudget(box); RefreshPreview(); };
             grid.Controls.Add(box, 0, i);
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
         }
         screen.Controls.Add(grid);
         _active = _rows.Length > 0 ? _rows[0] : null;
 
+        // The page as a decoder draws it, at the height of the rows.
+        int previewH = rowH * rows.Length;
+        int previewW = previewH * TeletextPage.Cols * TeletextRender.CellW /
+                       (Math.Max(1, rows.Length) * TeletextRender.CellH);
+        var previewHost = new Panel
+        {
+            Dock = DockStyle.Right, Width = previewW + 16, BackColor = Color.Black,
+            Padding = new Padding(8),
+        };
+        _preview.Dock = DockStyle.Fill;
+        _preview.BackColor = Color.Black;
+        previewHost.Controls.Add(_preview);
+        tips.SetToolTip(_preview, UiText.TipTeletextPreview);
+        RefreshPreview();
+
         Controls.Add(screen);
+        Controls.Add(previewHost);
         Controls.Add(buttons);
         Controls.Add(palette);
         Controls.Add(hint);
 
-        int width = cell.Width + screen.Padding.Horizontal + 24;
+        int width = cell.Width + screen.Padding.Horizontal + 24 + previewHost.Width;
         // hint.PreferredHeight is measured before the label has been through
         // a layout pass at this width, so it may wrap to a second line once
         // shown; 44 covers one or two lines of the default UI font either way.
@@ -182,8 +227,111 @@ public class TeletextDialog : Form
     // usual RichTextBox behaviour).
     private void ApplyColor(int code)
     {
-        if (_active == null) return;
+        if (_active == null || _active.ReadOnly) return;
         _active.SelectionColor = Palette[code];
+    }
+
+    // Puts one row in its box: editable text with colour runs, or, when it
+    // holds more than that, a greyed read-only graphics row kept as bytes.
+    private void SetRow(int i, string row)
+    {
+        var box = _rows[i];
+        _filling = true;
+        if (TeletextPage.IsGraphics(row))
+        {
+            _raw[i] = row.TrimEnd(' ');
+            box.ReadOnly = true;
+            box.Clear();
+            var sb = new StringBuilder(row.Length);
+            foreach (char ch in row) sb.Append(ch >= 0x20 && ch <= 0x7E ? ch : ' ');
+            box.SelectionColor = Color.Gray;
+            box.AppendText(sb.ToString().TrimEnd());
+        }
+        else
+        {
+            _raw[i] = null;
+            box.ReadOnly = false;
+            Decode(box, row);
+        }
+        _filling = false;
+    }
+
+    // Drops a graphics row's codes, keeping its letters as plain white text.
+    private void MakeText(int i)
+    {
+        string? raw = _raw[i];
+        if (raw == null) return;
+        var sb = new StringBuilder(raw.Length);
+        foreach (char ch in raw) sb.Append(ch >= 0x20 && ch <= 0x7E ? ch : ' ');
+        SetRow(i, sb.ToString().TrimEnd());
+        RefreshPreview();
+    }
+
+    private string RowBytes(int i) => _raw[i] ?? Encode(_rows[i]);
+
+    private void RefreshPreview()
+    {
+        if (_filling || _raw == null) return;
+        var rows = new string[_rows.Length];
+        for (int i = 0; i < rows.Length; i++) rows[i] = _rows[i] == null ? "" : RowBytes(i);
+        var old = _preview.Image;
+        _preview.Image = TeletextRender.Render(rows);
+        old?.Dispose();
+    }
+
+    private void ImportFile()
+    {
+        using var dlg = new OpenFileDialog { Filter = UiText.TeletextImportFilter };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        string[]? page;
+        try { page = TeletextPage.FromFile(dlg.FileName); }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, UiText.TeletextImportFile); return; }
+        TakePage(page);
+    }
+
+    private void ImportLink()
+    {
+        string start = "";
+        try { if (Clipboard.ContainsText() && Clipboard.GetText().Contains('#')) start = Clipboard.GetText().Trim(); }
+        catch (Exception) { /* the clipboard is someone else's for a moment */ }
+        using var f = new Form
+        {
+            Text = UiText.TeletextImportLink, FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+            ClientSize = new Size(520, 110),
+        };
+        var label = new Label { Text = UiText.TeletextLinkPrompt, AutoSize = true, Location = new Point(12, 12) };
+        var box = new TextBox { Text = start, Location = new Point(12, 36), Width = 496 };
+        var ok = new Button { Text = UiText.TeletextImportLink, AutoSize = true, DialogResult = DialogResult.OK };
+        var no = new Button { Text = UiText.Cancel, AutoSize = true, DialogResult = DialogResult.Cancel };
+        Theme.StyleButton(ok, primary: true);
+        Theme.StyleButton(no);
+        ok.Location = new Point(f.ClientSize.Width - 12 - 200, 70);
+        no.Location = new Point(f.ClientSize.Width - 12 - 90, 70);
+        f.Controls.AddRange(new Control[] { label, box, ok, no });
+        f.AcceptButton = ok;
+        f.CancelButton = no;
+        if (f.ShowDialog(this) != DialogResult.OK) return;
+        TakePage(TeletextPage.FromLink(box.Text));
+    }
+
+    // The page's rows 1.. go to the board's rows 1..; the header row and
+    // whatever lies below the board's last row are left out, and said so.
+    private void TakePage(string[]? page)
+    {
+        if (page == null)
+        {
+            MessageBox.Show(this, UiText.TeletextImportNothing, UiText.TeletextImportFile);
+            return;
+        }
+        for (int i = 0; i < _rows.Length && i + 1 < page.Length; i++) SetRow(i, page[i + 1]);
+        RefreshPreview();
+        bool dropped = false;
+        for (int r = _rows.Length + 1; r < page.Length; r++)
+            if (page[r].Trim().Length > 0) { dropped = true; break; }
+        if (dropped)
+            MessageBox.Show(this, string.Format(UiText.TeletextImportDropped, _rows.Length, _rows.Length + 1),
+                            UiText.TeletextImportFile);
     }
 
     // Undoes the last edit if it pushed the row's ENCODED length (visible
@@ -279,7 +427,7 @@ public class TeletextDialog : Form
         }
 
         var current = new string[_rows.Length];
-        for (int i = 0; i < _rows.Length; i++) current[i] = Encode(_rows[i]);
+        for (int i = 0; i < _rows.Length; i++) current[i] = RowBytes(i);
 
         var changed = new List<(int Row, string Text)>();
         for (int i = 0; i < _rows.Length; i++)
@@ -303,7 +451,7 @@ public class TeletextDialog : Form
                 {
                     foreach (var (row, text) in changed)
                         BoardConfig.Set(p, "teletext." + row.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                                        text, CancellationToken.None);
+                                        BoardSettings.TeletextToWire(text), CancellationToken.None);
                 }
                 catch (Exception ex) { error = ex.Message; }
                 finally

@@ -39,7 +39,8 @@ void teletextTick();
 // there is none, in which case the caller fills black itself.
 bool teletextRenderLine(uint8_t *uyvy, uint32_t line);
 
-// Sets the text of a row (1..TT_ROWS); Latin G0 only, no national
+// Sets the text of a row (1..TT_ROWS): the bytes as they go out, control
+// codes included; a stored 0x80 stands for 0x00. Latin G0, no national
 // positions.
 void teletextSetRow(int row, const char *text);
 
