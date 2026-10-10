@@ -58,6 +58,15 @@ public static class UiText
         "HQ is the full row (3.4 Mbit/s). LQ and Voice run at 32 kHz with fewer bits a sample and a shorter row, " +
         "2.6 and 2.0 Mbit/s, for less FM bandwidth; Voice puts every bit inside the error correction. " +
         "Narrow is mono at 16 kHz, 1.4 Mbit/s.";
+    public const string ClockText = "Text";
+    public const string ClockTopRight = "Top right";
+    public const string ClockBottomRight = "Bottom right";
+    public const string ClockColor = "Clock";
+    public const string ClockBackground = "Background";
+    public const string TipClockText =
+        "Where the first and second line go: beside the clock, level with its top or its bottom.";
+    public const string TipFaceColor = "The color of the clock: markers, hands and center dot.";
+    public const string TipBackColor = "The color of the picture behind the clock.";
     public const string TipPcmText =
         "Up to 10 characters sent inside the audio rows, protected like the audio: capitals, digits and punctuation.";
     public const string TipPcmCtrlInPicture =

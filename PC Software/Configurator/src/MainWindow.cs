@@ -54,7 +54,9 @@ public class MainWindow : Form
     {
         Text = UiText.AppTitle;
         MinimumSize = new Size(760, 860);
-        Size = new Size(780, 980);
+        // Wide enough that the options column keeps its labels on one
+        // line and the card preview is not squeezed; 780 was too narrow.
+        Size = new Size(1000, 980);
         BackColor = Theme.Paper;
         Font = new Font(Font.FontFamily, 9f);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }

@@ -128,6 +128,13 @@ public partial class CardsTab : TabPage
     // Ham PCM: the quality, the card's option bits 1..0.
     private readonly ComboBox _hamQuality = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private TableLayoutPanel _hamQualityRow = null!;
+    // TV clock (Own == 7): where its two text lines go, option bit 0,
+    // and its own two colours.
+    private readonly ComboBox _clockText = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private TableLayoutPanel _clockTextRow = null!;
+    private readonly Button _colFace = Swatch();
+    private readonly Button _colBack = Swatch();
+    private TableLayoutPanel _clockColorRow = null!;
 
     private void PushPcmOption() =>
         Push("option", (_pcmBits.SelectedIndex == 1 ? 1 : 0) | (_pcmEmphasis.Checked ? 2 : 0) |
@@ -264,7 +271,8 @@ public partial class CardsTab : TabPage
     private readonly HashSet<int> _stale = new();
     private bool _refreshDue;   // a dump is owed, once the board is free
     private bool _sharedChanged;   // for the save
-    private bool _askCrc;          // for the card being looked at; see AskCardCrc()
+    private bool _askCrc;          // a round over every card is due; see AskCardCrc()
+    private readonly Queue<int> _crcRound = new();   // cards still to ask in that round
     private int _wanted;        // the card the refresh is really after
 
     // Set from SlideshowTab (see MainWindow's wiring), so the list and
@@ -370,6 +378,12 @@ public partial class CardsTab : TabPage
         _hamQuality.Items.Add(UiText.HamVoice);
         _hamQuality.Items.Add(UiText.HamNarrow);
         _hamQuality.SelectedIndexChanged += (_, __) => Push("option", _hamQuality.SelectedIndex);
+        _why.SetToolTip(_clockText, UiText.TipClockText);
+        _clockText.Items.Add(UiText.ClockTopRight);
+        _clockText.Items.Add(UiText.ClockBottomRight);
+        _clockText.SelectedIndexChanged += (_, __) => Push("option", _clockText.SelectedIndex);
+        WireSwatch(_colFace, "facecolor", UiText.TipFaceColor);
+        WireSwatch(_colBack, "backcolor", UiText.TipBackColor);
         WireSwatch(_colTicker, "tickercolor", UiText.TipTickerColor);
         WireSwatch(_colId, "idcolor", UiText.TipIdColor);
         WireSwatch(_colSub, "subcolor", UiText.TipSubColor);

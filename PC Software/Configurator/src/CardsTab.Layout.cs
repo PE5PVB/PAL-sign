@@ -54,6 +54,8 @@ public partial class CardsTab
         _pcmCtrlPic.Visible = true;
         _pcmTextRow.Visible = true;
         _hamQualityRow.Visible = true;
+        _clockTextRow.Visible = true;
+        _clockColorRow.Visible = true;
         ShowRasterRows(true);
     }
 
@@ -88,6 +90,8 @@ public partial class CardsTab
         _pcmCtrlPic.Visible = false;
         _pcmTextRow.Visible = false;
         _hamQualityRow.Visible = false;
+        _clockTextRow.Visible = false;
+        _clockColorRow.Visible = false;
         _insertLabel.Visible = false;
         _insHost.Visible = false;
     }
@@ -260,6 +264,26 @@ public partial class CardsTab
         _hamQuality.Width = 200;
         _hamQualityRow.Controls.Add(_hamQuality, 1, 0);
         _own.Controls.Add(_hamQualityRow);
+        _clockTextRow = new TableLayoutPanel
+            { ColumnCount = 2, AutoSize = true, Margin = new Padding(0), Visible = false };
+        _clockTextRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _clockTextRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _clockTextRow.Controls.Add(new Label
+            { Text = UiText.ClockText, AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, 0);
+        _clockText.Dock = DockStyle.None;
+        _clockText.Width = 170;
+        _clockTextRow.Controls.Add(_clockText, 1, 0);
+        _own.Controls.Add(_clockTextRow);
+        _clockColorRow = new TableLayoutPanel
+            { ColumnCount = 4, AutoSize = true, Margin = new Padding(0), Visible = false };
+        for (int i = 0; i < 4; i++) _clockColorRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _clockColorRow.Controls.Add(new Label
+            { Text = UiText.ClockColor, AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, 0, 0);
+        _clockColorRow.Controls.Add(_colFace, 1, 0);
+        _clockColorRow.Controls.Add(new Label
+            { Text = UiText.ClockBackground, AutoSize = true, Margin = new Padding(16, 6, 0, 0) }, 2, 0);
+        _clockColorRow.Controls.Add(_colBack, 3, 0);
+        _own.Controls.Add(_clockColorRow);
         for (int i = 0; i < _own.Controls.Count; i++)
             _own.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         t.Controls.Add(new Label { Text = "", AutoSize = true });
@@ -311,6 +335,8 @@ public partial class CardsTab
         _colId.Enabled = on;
         _colSub.Enabled = on;
         _colIns.Enabled = on;
+        _colFace.Enabled = on;
+        _colBack.Enabled = on;
         _saveAs.Enabled = on;
         // Not touched anywhere else: FillFromCard() only sets their
         // Visible, and returns before that with no card selected, so

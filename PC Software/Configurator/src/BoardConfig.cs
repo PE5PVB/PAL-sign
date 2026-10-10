@@ -49,7 +49,8 @@ public class CardInfo
 
     // 0 none, 1 the PM5644 16:9 chroma bars, 2 AP1/AP2 on BBC Card G,
     // 3 the ATV Contest fields, 4 BBC Test Card F/W's own photo switch,
-    // 5 the Sony PCM card's 16 bit and pre-emphasis switches.
+    // 5 the Sony PCM card's 16 bit and pre-emphasis switches, 6 Ham
+    // PCM's quality, 7 the TV clock's text position and colours.
     public int Own;
 
     // Own == 4 only: show the uploaded replacement instead of the
@@ -57,7 +58,8 @@ public class CardInfo
     public bool CustomPhoto;
 
     // The card's own switches as a bit field, meaning per Own: for the
-    // Sony PCM card (Own == 5) bit 0 is 16 bit, bit 1 pre-emphasis.
+    // Sony PCM card (Own == 5) bit 0 is 16 bit, bit 1 pre-emphasis; for
+    // the TV clock (Own == 7) bit 0 puts the text at the bottom right.
     public int Option;
 
     // 0 not known yet, 1 no, 2 yes. Filled in as the board shows each card,
@@ -86,6 +88,10 @@ public class CardInfo
     public string IdColor = "FFFFFF";
     public string SubColor = "FFFFFF";
     public string InsColor = "FFFFFF";
+    // The TV clock's own two: the clock itself and the picture behind
+    // it. Kept once on the board, sent on every card line.
+    public string FaceColor = "F2F2F2";
+    public string BackColor = "000000";
 
     // What a fetched picture of this card depends on, so an unchanged
     // picture can be left alone. Not a checksum of the image; see
@@ -348,6 +354,8 @@ public static class BoardConfig
                 case "idcolor": c.IdColor = f[i][(eq + 1)..]; break;
                 case "subcolor": c.SubColor = f[i][(eq + 1)..]; break;
                 case "inscolor": c.InsColor = f[i][(eq + 1)..]; break;
+                case "facecolor": c.FaceColor = f[i][(eq + 1)..]; break;
+                case "backcolor": c.BackColor = f[i][(eq + 1)..]; break;
                 // In hex, read as hex rather than through Number(), which
                 // would quietly make it zero.
                 case "crc":

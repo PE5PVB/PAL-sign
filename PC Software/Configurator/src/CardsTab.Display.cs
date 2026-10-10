@@ -87,6 +87,8 @@ public partial class CardsTab
             _colId.BackColor = CardPreview.ColorOf(c.IdColor);
             _colSub.BackColor = CardPreview.ColorOf(c.SubColor);
             _colIns.BackColor = CardPreview.ColorOf(c.InsColor);
+            _colFace.BackColor = CardPreview.ColorOf(c.FaceColor);
+            _colBack.BackColor = CardPreview.ColorOf(c.BackColor);
             _showId.Checked = c.ShowId;
             // The board says which cards have a place for each of these;
             // not known yet counts as shown.
@@ -109,6 +111,8 @@ public partial class CardsTab
             _pcmCtrlPic.Visible = sony;
             _pcmTextRow.Visible = ham;
             _hamQualityRow.Visible = ham;
+            _clockTextRow.Visible = c.Own == 7;
+            _clockColorRow.Visible = c.Own == 7;
             ShowRasterRows(!(sony || ham));
             _bars.Checked = _cfg.G924Bars;
             _ap2.Checked = _cfg.TcgAp2;
@@ -123,6 +127,7 @@ public partial class CardsTab
             _contest1.Tag = _contest1.Text;
             _contest2.Tag = _contest2.Text;
             _hamQuality.SelectedIndex = c.Option & 3;
+            _clockText.SelectedIndex = c.Option & 1;
             _pcmText.Text = _cfg.PcmText;
             _pcmText.Tag = _pcmText.Text;
 

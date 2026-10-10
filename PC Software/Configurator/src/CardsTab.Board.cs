@@ -220,29 +220,43 @@ public partial class CardsTab
     }
 
     /// <summary>Says a shared setting changed elsewhere, so a kept
-    /// picture may be out of date. Acted on at the next save.</summary>
+    /// picture may be out of date: every card's checksum is asked again
+    /// (AskCardCrc()), and a full dump follows at the next save.</summary>
     public void NoteSharedChange()
     {
         _sharedChanged = true;
         _askCrc = true;
+        _crcRound.Clear();   // a round already under way starts over
     }
 
-    // The one card being looked at, in sixty bytes instead of the whole
-    // dump: a shared setting can change what it looks like, and this
-    // avoids the black flash a full dump costs.
+    // A shared setting (the first or second text, for one) can change
+    // any card, not just the one on screen. Every card is asked for its
+    // checksum, sixty bytes each and one per call so the window stays
+    // live, starting with the card on screen; a card whose checksum
+    // moved is marked out of date (TakeCrc()). Asking only the card on
+    // screen left every other kept picture with the old text until a
+    // save and a reselect.
     private void AskCardCrc()
     {
-        var c = Current;
         string? p = _port();
-        if (c == null || p == null) { _askCrc = false; return; }
+        if (_cfg == null || p == null) { _askCrc = false; _crcRound.Clear(); return; }
+        if (_crcRound.Count == 0)
+        {
+            var cur = Current;
+            if (cur != null) _crcRound.Enqueue(cur.Number);
+            foreach (var card in _cfg.Cards)
+                if (cur == null || card.Number != cur.Number) _crcRound.Enqueue(card.Number);
+            if (_crcRound.Count == 0) { _askCrc = false; return; }
+        }
+        int number = _crcRound.Peek();
         try
         {
             _live ??= BoardConfig.OpenLive(p);
-            string reply = BoardConfig.SetLive(_live, "cardcrc",
-                                               c.Number.ToString());
-            _askCrc = false;
+            string reply = BoardConfig.SetLive(_live, "cardcrc", number.ToString());
+            _crcRound.Dequeue();
+            if (_crcRound.Count == 0) _askCrc = false;
             uint? crc = BoardConfig.CrcIn(reply);
-            if (crc != null) TakeCrc(c.Number, crc.Value);
+            if (crc != null) TakeCrc(number, crc.Value);
         }
         catch (Exception)
         {

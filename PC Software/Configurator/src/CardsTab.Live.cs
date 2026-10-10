@@ -66,6 +66,8 @@ public partial class CardsTab
             case "idcolor": c.IdColor = hex; break;
             case "subcolor": c.SubColor = hex; break;
             case "inscolor": c.InsColor = hex; break;
+            case "facecolor": c.FaceColor = hex; break;
+            case "backcolor": c.BackColor = hex; break;
         }
         _preview.Invalidate();
         _pending[$"card.{c.Number}.{field}"] = hex;
@@ -168,8 +170,7 @@ public partial class CardsTab
                 TakeCrc(name, crc.Value);
             else
             {
-                _sharedChanged = true;
-                _askCrc = true;
+                NoteSharedChange();
             }
         }
         catch (Exception ex)
@@ -188,6 +189,10 @@ public partial class CardsTab
         TakeCrc(number, crc);
     }
 
+    // A changed checksum marks the kept picture as out of date. Only the
+    // card on screen is fetched at once: a fetch shows the card on the
+    // board, so fetching the others would switch the picture there; they
+    // are fetched when selected (FillFromCard()).
     private void TakeCrc(int number, uint crc)
     {
         if (_cfg == null) return;
@@ -197,7 +202,7 @@ public partial class CardsTab
             if (c.Crc == crc) return;
             c.Crc = crc;
             _stale.Add(number);
-            if (!_busy) { _wanted = number; Run(FetchOne); }
+            if (Current?.Number == number && !_busy) { _wanted = number; Run(FetchOne); }
             return;
         }
     }
