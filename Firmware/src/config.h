@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 // The version on the splash of the little panel.
-#define CFG_VERSION "v1.00"
+#define CFG_VERSION "v1.10"
 
 // Station identification. Allowed: A-Z, 0-9, space, the slashed O and
 // : ! ? / @ # * _ + < > - . , = ( )   Lower case becomes upper case.

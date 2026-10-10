@@ -13,8 +13,8 @@ public sealed class AboutDialog : Form
     // One version for the whole PC side: the configurator and the PCM
     // decoder ship together from the same repository, so they carry
     // the same number.
-    public const string Version = "1.0";
-    public const string VersionDate = "31 August 2026";
+    public const string Version = "1.1";
+    public const string VersionDate = "10 October 2026";
 
     private AboutDialog(string app, bool splash)
     {
