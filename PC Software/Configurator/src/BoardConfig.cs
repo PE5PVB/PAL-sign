@@ -117,6 +117,10 @@ public class BoardSettings
     public string TextId = "", TextSub = "", TickerText = "";
     public string Contest1 = "", Contest2 = "";
     public string PcmText = "";   // the Ham PCM text channel, 10 characters
+    public string LegacyText = "";   // BATC Legacy's third line
+    // The board's firmware version (CFG_VERSION); empty from a firmware
+    // older than v1.11, which did not send it.
+    public string Firmware = "";
     // The two fixed lines for the insert boxes, shown instead of the
     // date and time.
     public string InsertLeft = "", InsertRight = "";
@@ -280,6 +284,8 @@ public static class BoardConfig
             case "contest1": s.Contest1 = value; break;
             case "contest2": s.Contest2 = value; break;
             case "pcmtext": s.PcmText = value; break;
+            case "legacytext": s.LegacyText = value; break;
+            case "version": s.Firmware = value; break;
             case "insertleft": s.InsertLeft = value; break;
             case "insertright": s.InsertRight = value; break;
             case "contestnr": s.ContestNr = num; break;
@@ -464,15 +470,17 @@ public static class BoardConfig
     /// <summary>Puts the board's clock right. Done at every Connect, so
     /// the insert boxes and any card fetched afterwards show this
     /// computer's time. Not kept in flash and marks nothing unsaved.
-    /// </summary>
-    public static void SetClock(string portName, DateTime now, CancellationToken stop)
+    /// replySeconds bounds the wait for the first answer, so Connect can use
+    /// it as the handshake and say at once that nothing answers.</summary>
+    public static void SetClock(string portName, DateTime now, CancellationToken stop,
+                                int replySeconds = 20)
     {
-        using var port = Open(portName);
+        using var port = Open(portName, 500);
         try
         {
             Trace.Line("send", "T");
             port.Write("T");
-            WaitFor(port, "[clock] type", stop);
+            WaitFor(port, "[clock] type", stop, replySeconds);
             string line = now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
             Trace.Line("send", line + "\n");
             port.Write(line + "\n");

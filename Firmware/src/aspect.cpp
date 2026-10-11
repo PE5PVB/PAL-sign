@@ -4,6 +4,7 @@
 #include "gfx.h"
 #include "pattern.h"
 #include "ticker.h"
+#include "video.h"
 
 // WSS word: 14 bits, group 1 (bits 3..0) is the aspect ratio, groups 2-4
 // are zero (camera mode, no subtitles/reserved). Codes from AN9716 table 2
@@ -43,6 +44,7 @@ void aspectSet(int mode) {
   current = mode;
   active = ASPECTS[mode].activeLines;
   bar = ASPECTS[mode].top ? 0 : (((SCREEN_H - active) / 2) & ~1);   // even, or the bar shimmers
+  videoPrefillAspect(bar, active);
   advSetWss(mode != ASPECT_OFF, ASPECTS[mode].wss);
 }
 

@@ -125,6 +125,10 @@ public partial class CardsTab : TabPage
     private readonly TextBox _pcmText = new()
         { Width = 120, MaxLength = 10, CharacterCasing = CharacterCasing.Upper };
     private TableLayoutPanel _pcmTextRow = null!;
+    // BATC Legacy (Own == 8): its third line, one setting on the board.
+    private readonly TextBox _legacyText = new()
+        { Width = 260, MaxLength = 31, CharacterCasing = CharacterCasing.Upper };
+    private TableLayoutPanel _legacyTextRow = null!;
     // Ham PCM: the quality, the card's option bits 1..0.
     private readonly ComboBox _hamQuality = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private TableLayoutPanel _hamQualityRow = null!;
@@ -371,6 +375,9 @@ public partial class CardsTab : TabPage
         SendOnLeave(_contest1, "contest1");
         SendOnLeave(_contest2, "contest2");
         SendOnLeave(_pcmText, "pcmtext");
+        BoardText.Guard(_legacyText);
+        SendOnLeave(_legacyText, "legacytext");
+        _why.SetToolTip(_legacyText, UiText.TipLegacyText);
         _why.SetToolTip(_pcmText, UiText.TipPcmText);
         _why.SetToolTip(_hamQuality, UiText.TipHamQuality);
         _hamQuality.Items.Add(UiText.HamHq);

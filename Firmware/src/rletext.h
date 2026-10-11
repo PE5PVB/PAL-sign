@@ -6,9 +6,8 @@
 // the luma edge gets, written at the even x only like fillSpanSolid().
 //
 // Performance-critical: solid runs are clipped once and poured out as
-// one 32-bit store per pixel pair; the soft ring costs no multiply,
-// since every edge byte in a ring stream is exactly 128 (halfway to
-// black is (y + 16) >> 1).
+// one 32-bit store per pixel pair; an edge byte costs a multiply and a
+// shift, no division (rleMix255()).
 //
 // Shared between the contest page and the ticker; forced inline so a
 // caller marked __not_in_flash_func keeps this out of flash too.
@@ -44,9 +43,22 @@ static inline __attribute__((always_inline)) void rleSolidSpan(uint8_t *base, in
   }
 }
 
+// p + (target - p) * cov / 255, truncated towards zero like a C
+// division: x / 255 == (x * 0x8081) >> 23 holds exactly for
+// 0 <= x <= 255 * 255, and the sign is handled apart.
+static inline __attribute__((always_inline)) uint8_t rleMix255(uint8_t p, int target,
+                                                               uint8_t cov) {
+  const int n = (target - p) * cov;
+  const int q = n >= 0 ? (int)(((uint32_t)n * 0x8081u) >> 23)
+                       : -(int)(((uint32_t)-n * 0x8081u) >> 23);
+  return (uint8_t)(p + q);
+}
+
 // Dark counterpart, for the ring of the transparent ticker: a solid
-// token writes black level with neutral chroma; an edge byte halves the
-// luma towards black, chroma untouched.
+// token writes black level with neutral chroma; an edge byte pulls the
+// luma towards black by its coverage, chroma untouched. The ticker's
+// rings are vertically smoothed (tools/make_contest_font.py,
+// smooth_glyph()), so an edge byte can be any coverage.
 static inline __attribute__((always_inline)) void rleDarkenRow(uint8_t *base, int x0,
                                                                const uint8_t *s,
                                                                const uint8_t *e,
@@ -60,26 +72,32 @@ static inline __attribute__((always_inline)) void rleDarkenRow(uint8_t *base, in
       rleSolidSpan(base, x, x + len, 16, 128, 128, screenW);
       x += len;
     } else {
+      // Clipped once per run. (d * (cov + 1)) >> 8 is d * cov / 255
+      // within one code, exact at 0 and 255.
       const int len = op;
-      s += len;   // the bytes are all 128 and are not read
-      for (int i = 0; i < len; i++, x++) {
-        if ((unsigned)x >= (unsigned)screenW) continue;
-        uint8_t *py = &base[2 * x + 1];
-        *py = (uint8_t)((*py + 16) >> 1);
+      int a = x < 0 ? -x : 0;
+      int b = x + len > screenW ? screenW - x : len;
+      for (int i = a; i < b; i++) {
+        uint8_t *py = &base[2 * (x + i) + 1];
+        const int d = *py - 16;
+        if (d > 0) *py = (uint8_t)(*py - ((d * (s[i] + 1)) >> 8));
       }
+      s += len;
+      x += len;
     }
   }
 }
 
 // The ink triple is the colour of the lettering: y through the lut, cb
 // and cr as the chroma the solid core writes and the edges blend
-// towards.
+// towards. chroma false leaves the edges' chroma alone, for a caller
+// that knows it is already cb/cr under every edge byte.
 static inline __attribute__((always_inline)) void rleBlendRow(uint8_t *base, int x0,
                                                               const uint8_t *s,
                                                               const uint8_t *e,
                                                               const uint8_t *lut,
                                                               uint8_t y, uint8_t cb, uint8_t cr,
-                                                              int screenW) {
+                                                              int screenW, bool chroma = true) {
   int x = x0;
   while (s < e) {
     x += *s++;
@@ -89,20 +107,25 @@ static inline __attribute__((always_inline)) void rleBlendRow(uint8_t *base, int
       rleSolidSpan(base, x, x + len, y, cb, cr, screenW);
       x += len;
     } else {
-      int len = op;
-      for (int i = 0; i < len; i++, x++) {
-        const uint8_t v = lut[*s++];
-        if ((unsigned)x >= (unsigned)screenW) continue;
-        const int qb = (x >> 1) * 4;
-        uint8_t *py = &base[qb + ((x & 1) ? 3 : 1)];
-        if (v > *py) *py = v;
-        if (!(x & 1)) {
-          const uint8_t cov = s[-1];
-          uint8_t *pb = &base[qb + 0], *pr = &base[qb + 2];
-          *pb = (uint8_t)(*pb + ((cb - *pb) * cov) / 255);
-          *pr = (uint8_t)(*pr + ((cr - *pr) * cov) / 255);
+      const int len = op;
+      int a = x < 0 ? -x : 0;
+      int b = x + len > screenW ? screenW - x : len;
+      for (int i = a; i < b; i++) {
+        const int xx = x + i;
+        const uint8_t cov = s[i];
+        const uint8_t v = lut[cov];
+        uint8_t *q = base + (xx >> 1) * 4;
+        if (xx & 1) {
+          if (v > q[3]) q[3] = v;
+        } else {
+          if (v > q[1]) q[1] = v;
+          if (!chroma) continue;
+          q[0] = rleMix255(q[0], cb, cov);
+          q[2] = rleMix255(q[2], cr, cov);
         }
       }
+      s += len;
+      x += len;
     }
   }
 }

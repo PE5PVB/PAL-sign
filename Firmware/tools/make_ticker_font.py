@@ -53,14 +53,18 @@ def main():
         f.write("// scales them at render time: Inter (SIL OFL 1.1) and Doto\n")
         f.write("// (SIL OFL 1.1, https://github.com/oliverlalan/Doto). See\n")
         f.write("// tools/contest_rle.py for the run form and the two generators\n")
-        f.write("// for what yoff, lsb and adv mean.\n")
+        f.write("// for what yoff, lsb and adv mean. Vertically smoothed against\n")
+        f.write("// interlace twitter (smooth_glyph() in make_contest_font.py):\n")
+        f.write("// ring bytes are any coverage, not just 128.\n")
         f.write("#pragma once\n#include <stdint.h>\n\n")
         f.write('#include "runglyph.h"\n\n')
         for target, suffix in SIZES:
-            build_inter(f, target, f"TICKER_FONT{suffix}", "TickerGlyph", rings=True)
+            build_inter(f, target, f"TICKER_FONT{suffix}", "TickerGlyph", rings=True,
+                        smooth=True)
             f.write("\n")
         for target, suffix in SIZES:
-            build_square(f, target, f"TICKER_FONT_SQUARE{suffix}", "TickerGlyph", rings=True)
+            build_square(f, target, f"TICKER_FONT_SQUARE{suffix}", "TickerGlyph", rings=True,
+                         smooth=True)
             f.write("\n")
     print(f"  -> {OUT}")
 

@@ -347,8 +347,10 @@ void cfgSeqText(char *buf, int len) {
 // the list (cardShiftV4). Version 6: Mixed bars/Picdream move after TVE
 // (CARD_ORDER_V5). Version 7: eight to ten bytes, tickerSize, no
 // reorder. Version 8: Crosshatch enters after Multiburst (cardShiftV7).
+// Version 9: the BATC card moves from last to position 10 (cardMoveV8).
+// Version 10: BATC Legacy moves from last to position 11 (cardMoveV9).
 static const uint32_t CARD_MAGIC = 0x44524143;  // "CARD"
-static const uint16_t CARD_VERSION = 8;
+static const uint16_t CARD_VERSION = 10;
 
 // More than there are cards, so adding one does not need a new version.
 static const int CARD_SLOTS = 48;
@@ -534,7 +536,7 @@ int cfgTickerSize() { return cfgCardTickerSize(-1); }
 // seven; the count written is stored, so an older page reads back only
 // as far as it goes.
 static const uint32_t EXTRA_MAGIC = 0x41525458;  // "XTRA"
-static const uint16_t EXTRA_VERSION = 4;
+static const uint16_t EXTRA_VERSION = 5;
 static const int EXTRA_CONTROLS = 16;
 
 struct ExtraBlock {
@@ -553,9 +555,15 @@ struct ExtraBlock {
   // Version 4: the Ham PCM text channel, appended; a version 3 page
   // (without it) is still read, see extraValidV3().
   char pcmText[PCM_TEXT_MAX];
+  // Version 5: BATC Legacy's third line, appended likewise (extraValidV4).
+  char legacyText[TEXT_MAX];
 };
 static_assert(sizeof(ExtraBlock) <= PAGINA, "the fifth page does not fit in one flash page");
-static const uint32_t EXTRA_V3_LENGTH = offsetof(ExtraBlock, pcmText);
+// An older version wrote sizeof() of its own struct: the fields up to the
+// one added next, padded to the struct's 4-byte alignment.
+static const uint32_t EXTRA_V3_LENGTH = (offsetof(ExtraBlock, pcmText) + 3) & ~3u;
+static const uint32_t EXTRA_V4_LENGTH = (offsetof(ExtraBlock, legacyText) + 3) & ~3u;
+static_assert(EXTRA_V3_LENGTH == 120 && EXTRA_V4_LENGTH == 132, "older extra page sizes");
 
 // Defined further down, where the other texts are.
 static void setText(char *target, const char *s);
@@ -563,6 +571,7 @@ static void setText(char *target, const char *s);
 static char insertLeft[TEXT_MAX];
 static char insertRight[TEXT_MAX];
 static char pcmText[PCM_TEXT_MAX];
+static char legacyText[TEXT_MAX];
 
 static uint32_t extraCrc(const ExtraBlock *b) {
   const uint8_t *p = (const uint8_t *)b + offsetof(ExtraBlock, left);
@@ -581,6 +590,15 @@ static bool extraValid(const ExtraBlock *b) {
   return b->crc == extraCrc(b);
 }
 
+// The page as version 4 wrote it: everything up to legacyText.
+static bool extraValidV4(const ExtraBlock *b) {
+  if (b->magic != EXTRA_MAGIC) return false;
+  if (b->version != 4) return false;
+  if (b->length != EXTRA_V4_LENGTH) return false;
+  const uint8_t *p = (const uint8_t *)b + offsetof(ExtraBlock, left);
+  return b->crc == photoCrc32(p, EXTRA_V4_LENGTH - offsetof(ExtraBlock, left), 0xFFFFFFFFu);
+}
+
 // The page as version 3 wrote it: everything up to pcmText.
 static bool extraValidV3(const ExtraBlock *b) {
   if (b->magic != EXTRA_MAGIC) return false;
@@ -597,9 +615,11 @@ static bool extraValidV3(const ExtraBlock *b) {
 // yccFromRgb in gfx.h). Order matches the CFG_COLOR_ indices in
 // settings.h. Versions 2-4 track the same card reorders CARD_VERSION
 // did (cardShiftV4, cardOrderV5, cardShiftV7); version 5 adds the TV
-// clock's two colours after the cards, versions 1-4 end at the cards.
+// clock's two colours after the cards, versions 1-4 end at the cards;
+// version 6 takes the BATC card's move (cardMoveV8), version 7 BATC
+// Legacy's (cardMoveV9).
 static const uint32_t COLOR_MAGIC = 0x524C4F43;  // "COLR"
-static const uint16_t COLOR_VERSION = 5;
+static const uint16_t COLOR_VERSION = 7;
 
 struct CardColors {
   uint8_t rgb[CFG_COLOR_COUNT][3];
@@ -648,6 +668,22 @@ static const ColorBlock *colorInFlash() {
 static bool colorValid(const ColorBlock *b) {
   if (b->magic != COLOR_MAGIC) return false;
   if (b->version != COLOR_VERSION) return false;
+  if (b->length != sizeof(ColorBlock)) return false;
+  return b->crc == colorCrc(b);
+}
+
+// Version 6: today's layout, counted before BATC Legacy moved.
+static bool colorValidV6(const ColorBlock *b) {
+  if (b->magic != COLOR_MAGIC) return false;
+  if (b->version != 6) return false;
+  if (b->length != sizeof(ColorBlock)) return false;
+  return b->crc == colorCrc(b);
+}
+
+// Version 5: today's layout, counted before the BATC card moved.
+static bool colorValidV5(const ColorBlock *b) {
+  if (b->magic != COLOR_MAGIC) return false;
+  if (b->version != 5) return false;
   if (b->length != sizeof(ColorBlock)) return false;
   return b->crc == colorCrc(b);
 }
@@ -739,6 +775,9 @@ void cfgSetPcmText(const char *s) {
   dirty = true;
 }
 
+const char *cfgLegacyText() { return legacyText; }
+void cfgSetLegacyText(const char *s) { setText(legacyText, s); }
+
 const char *cfgInsertLeft() { return insertLeft; }
 const char *cfgInsertRight() { return insertRight; }
 // The layout is kept until something says otherwise, so a new caption
@@ -809,10 +848,13 @@ static bool subAsked = false;
 static const uint8_t ID_UNKNOWN = 0;
 static const uint8_t ID_NO_ROOM = 1;
 static const uint8_t ID_HAS_ROOM = 2;
-static uint8_t cardIdSeen[CARD_SLOTS];
-static uint8_t cardBoxSeen[CARD_SLOTS];
-static uint8_t cardLineSeen[CARD_SLOTS];
-static uint8_t cardSubSeen[CARD_SLOTS];
+// All four in one byte a card, two bits each.
+static const int SEEN_ID = 0, SEEN_BOX = 2, SEEN_LINE = 4, SEEN_SUB = 6;
+static uint8_t cardSeen[CARD_SLOTS];
+static uint8_t seenGet(int card, int field) { return (cardSeen[card] >> field) & 3; }
+static void seenSet(int card, int field, uint8_t v) {
+  cardSeen[card] = (uint8_t)((cardSeen[card] & ~(3 << field)) | (v << field));
+}
 
 bool cfgCardHasId() { return idAsked; }
 bool cfgCardHasSub() { return subAsked; }
@@ -822,7 +864,7 @@ uint8_t cfgCardIdSeen(int card) {
   // The card on screen has laid itself out, so the flag is the
   // freshest answer there is.
   if (card == activeCard) return idAsked ? ID_HAS_ROOM : ID_NO_ROOM;
-  if (cardIdSeen[card] != ID_UNKNOWN) return cardIdSeen[card];
+  if (seenGet(card, SEEN_ID) != ID_UNKNOWN) return seenGet(card, SEEN_ID);
   // Not shown yet: fall back on the declared trait rather than wait,
   // since the PC only fetches pictures it lacks a copy of and a card
   // whose copy is still good may never load at all.
@@ -834,7 +876,7 @@ uint8_t cfgCardIdSeen(int card) {
 uint8_t cfgCardBoxSeen(int card) {
   if (card < 0 || card >= CARD_SLOTS) return ID_UNKNOWN;
   if (card == activeCard && insertInUse()) return ID_HAS_ROOM;
-  if (cardBoxSeen[card] != ID_UNKNOWN) return cardBoxSeen[card];
+  if (seenGet(card, SEEN_BOX) != ID_UNKNOWN) return seenGet(card, SEEN_BOX);
   return (cardTrait[card] & CARD_TRAIT_BOX) ? ID_HAS_ROOM : ID_NO_ROOM;
 }
 
@@ -842,7 +884,7 @@ uint8_t cfgCardBoxSeen(int card) {
 uint8_t cfgCardLineSeen(int card) {
   if (card < 0 || card >= CARD_SLOTS) return ID_UNKNOWN;
   if (card == activeCard && movingLineInUse()) return ID_HAS_ROOM;
-  if (cardLineSeen[card] != ID_UNKNOWN) return cardLineSeen[card];
+  if (seenGet(card, SEEN_LINE) != ID_UNKNOWN) return seenGet(card, SEEN_LINE);
   return (cardTrait[card] & CARD_TRAIT_LINE) ? ID_HAS_ROOM : ID_NO_ROOM;
 }
 
@@ -850,7 +892,7 @@ uint8_t cfgCardLineSeen(int card) {
 uint8_t cfgCardSubSeen(int card) {
   if (card < 0 || card >= CARD_SLOTS) return ID_UNKNOWN;
   if (card == activeCard) return subAsked ? ID_HAS_ROOM : ID_NO_ROOM;
-  if (cardSubSeen[card] != ID_UNKNOWN) return cardSubSeen[card];
+  if (seenGet(card, SEEN_SUB) != ID_UNKNOWN) return seenGet(card, SEEN_SUB);
   return (cardTrait[card] & CARD_TRAIT_SUB) ? ID_HAS_ROOM : ID_NO_ROOM;
 }
 
@@ -864,47 +906,47 @@ void cfgSetActiveCard(int i) {
   // trait, so a trait that has rotted out of step says so out loud.
   if (leaving && activeCard >= 0 && activeCard < CARD_SLOTS) {
     const uint8_t seen = idAsked ? ID_HAS_ROOM : ID_NO_ROOM;
-    if (cardIdSeen[activeCard] == ID_UNKNOWN &&
+    if (seenGet(activeCard, SEEN_ID) == ID_UNKNOWN &&
         seen != ((cardTrait[activeCard] & CARD_TRAIT_ID) ? ID_HAS_ROOM : ID_NO_ROOM)) {
       Serial.print(LANG_CFG_CARD);
       Serial.print(activeCard + 1);
       Serial.print(seen == ID_HAS_ROOM ? LANG_TRAIT_ID_SEEN : LANG_TRAIT_ID_NOT_SEEN);
       Serial.println(LANG_SEE_CARD_TRAIT_ID);
     }
-    cardIdSeen[activeCard] = seen;
+    seenSet(activeCard, SEEN_ID, seen);
 
     // Read here and not after insertClearInUse(); the order matters,
     // which is why selectPattern() calls this first.
     const uint8_t box = insertInUse() ? ID_HAS_ROOM : ID_NO_ROOM;
-    if (cardBoxSeen[activeCard] == ID_UNKNOWN &&
+    if (seenGet(activeCard, SEEN_BOX) == ID_UNKNOWN &&
         box != ((cardTrait[activeCard] & CARD_TRAIT_BOX) ? ID_HAS_ROOM : ID_NO_ROOM)) {
       Serial.print(LANG_CFG_CARD);
       Serial.print(activeCard + 1);
       Serial.print(box == ID_HAS_ROOM ? LANG_TRAIT_BOX_SEEN : LANG_TRAIT_BOX_NOT_SEEN);
       Serial.println(LANG_SEE_CARD_TRAIT_BOX);
     }
-    cardBoxSeen[activeCard] = box;
+    seenSet(activeCard, SEEN_BOX, box);
 
     // Read before movingLineClearInUse(), same reason as the boxes above.
     const uint8_t ln = movingLineInUse() ? ID_HAS_ROOM : ID_NO_ROOM;
-    if (cardLineSeen[activeCard] == ID_UNKNOWN &&
+    if (seenGet(activeCard, SEEN_LINE) == ID_UNKNOWN &&
         ln != ((cardTrait[activeCard] & CARD_TRAIT_LINE) ? ID_HAS_ROOM : ID_NO_ROOM)) {
       Serial.print(LANG_CFG_CARD);
       Serial.print(activeCard + 1);
       Serial.print(ln == ID_HAS_ROOM ? LANG_TRAIT_LINE_SEEN : LANG_TRAIT_LINE_NOT_SEEN);
       Serial.println(LANG_SEE_CARD_TRAIT_LINE);
     }
-    cardLineSeen[activeCard] = ln;
+    seenSet(activeCard, SEEN_LINE, ln);
 
     const uint8_t sub = subAsked ? ID_HAS_ROOM : ID_NO_ROOM;
-    if (cardSubSeen[activeCard] == ID_UNKNOWN &&
+    if (seenGet(activeCard, SEEN_SUB) == ID_UNKNOWN &&
         sub != ((cardTrait[activeCard] & CARD_TRAIT_SUB) ? ID_HAS_ROOM : ID_NO_ROOM)) {
       Serial.print(LANG_CFG_CARD);
       Serial.print(activeCard + 1);
       Serial.print(sub == ID_HAS_ROOM ? LANG_TRAIT_SUB_SEEN : LANG_TRAIT_SUB_NOT_SEEN);
       Serial.println(LANG_SEE_CARD_TRAIT_SUB);
     }
-    cardSubSeen[activeCard] = sub;
+    seenSet(activeCard, SEEN_SUB, sub);
   }
   leaving = true;
   activeCard = (i >= 0 && i < CARD_SLOTS) ? i : 0;
@@ -1248,6 +1290,22 @@ static bool cardValidV7(const CardBlock *b) {
   return b->crc == cardCrc(b);
 }
 
+// A version 9 block: today's records, counted before BATC Legacy moved.
+static bool cardValidV9(const CardBlock *b) {
+  if (b->magic != CARD_MAGIC) return false;
+  if (b->version != 9) return false;
+  if (b->length != sizeof(CardBlock)) return false;
+  return b->crc == cardCrc(b);
+}
+
+// A version 8 block: today's records, counted before the BATC card moved.
+static bool cardValidV8(const CardBlock *b) {
+  if (b->magic != CARD_MAGIC) return false;
+  if (b->version != 8) return false;
+  if (b->length != sizeof(CardBlock)) return false;
+  return b->crc == cardCrc(b);
+}
+
 // Old (version 5) position to new (version 6) position, for Mixed bars
 // and Picdream moving to right after the TVE card.
 // Index is the old position, value is the new one; positions beyond 34
@@ -1268,6 +1326,28 @@ static uint8_t cardShiftV4(uint8_t i) { return i < 17 ? i : (uint8_t)(i + 1); }
 // eighteen cards up to and including Multiburst stay put, Contest and
 // every photo slot behind it move one up.
 static uint8_t cardShiftV7(uint8_t i) { return i < 18 ? i : (uint8_t)(i + 1); }
+
+// Old (version 8) position to new (version 9) position, for the BATC
+// card moving from the end of the list (37, 0 based) to position 9,
+// right after Picdream: the cards from 9 to 36 move one up. A
+// permutation of the slots, so no index runs past the last one.
+static const int BATC_OLD = 37, BATC_NEW = 9;
+static uint8_t cardMoveV8(uint8_t i) {
+  if (i == BATC_OLD) return BATC_NEW;
+  return (i >= BATC_NEW && i < BATC_OLD) ? (uint8_t)(i + 1) : i;
+}
+
+// Old (version 9) position to new (version 10) position, for BATC
+// Legacy moving from the end of the list (38) to position 10, right
+// after the BATC card: the cards from 10 to 37 move one up.
+static const int LEGACY_OLD = 38, LEGACY_NEW = 10;
+static uint8_t cardMoveV9(uint8_t i) {
+  if (i == LEGACY_OLD) return LEGACY_NEW;
+  return (i >= LEGACY_NEW && i < LEGACY_OLD) ? (uint8_t)(i + 1) : i;
+}
+
+// A version 8 position to today's.
+static uint8_t cardUpV8(uint8_t i) { return cardMoveV9(cardMoveV8(i)); }
 
 // The speed a record from before the speed byte gets: walking left at
 // the pace the band always had, rung 4 of the ladder.
@@ -1411,6 +1491,8 @@ static void zetFabriek() {
   insertMode = CFG_INSERT_MODE;
   strncpy(pcmText, CFG_PCM_TEXT, PCM_TEXT_MAX - 1);
   pcmText[PCM_TEXT_MAX - 1] = 0;
+  strncpy(legacyText, CFG_LEGACY_TEXT, TEXT_MAX - 1);
+  legacyText[TEXT_MAX - 1] = 0;
   strncpy(contestText1, CFG_CONTEST_TEXT1, TEXT_MAX - 1);
   strncpy(contestText2, CFG_CONTEST_TEXT2, TEXT_MAX - 1);
   contestText1[TEXT_MAX - 1] = 0;
@@ -1475,20 +1557,26 @@ void cfgInit() {
   const CardBlockV6 *c6 = (const CardBlockV6 *)c;
   if (cardValid(c)) {
     memcpy(cardSet, c->card, sizeof(cardSet));
+  } else if (cardValidV9(c)) {
+    // Today's records, only BATC Legacy's move to take.
+    for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardMoveV9((uint8_t)i)] = c->card[i];
+  } else if (cardValidV8(c)) {
+    // Today's records, the BATC card's and BATC Legacy's moves to take.
+    for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardUpV8((uint8_t)i)] = c->card[i];
   } else if (cardValidV7(c)) {
     // Already today's ten byte records, only the order changes: a
     // plain copy per slot, no field conversion, unlike cardFromV6
     // below.
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      cardSet[cardShiftV7((uint8_t)i)] = c->card[i];
+      cardSet[cardUpV8(cardShiftV7((uint8_t)i))] = c->card[i];
     }
   } else if (cardValidV6(c6)) {
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      cardFromV6(&cardSet[cardShiftV7((uint8_t)i)], &c6->card[i]);
+      cardFromV6(&cardSet[cardUpV8(cardShiftV7((uint8_t)i))], &c6->card[i]);
     }
   } else if (cardValidV5(c6)) {
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      cardFromV6(&cardSet[cardShiftV7(cardOrderV5((uint8_t)i))], &c6->card[i]);
+      cardFromV6(&cardSet[cardUpV8(cardShiftV7(cardOrderV5((uint8_t)i)))], &c6->card[i]);
     }
   } else if (cardValidV4(c6)) {
     // Two shifts chain here (cardShiftV4 then cardShiftV7), each able to
@@ -1496,15 +1584,15 @@ void cfgInit() {
     // to stop a slot earlier than the others do; see CARD_SLOTS's own
     // note on why there is room to spare.
     for (int i = 0; i < CARD_SLOTS - 2; i++) {
-      cardFromV6(&cardSet[cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i)))], &c6->card[i]);
+      cardFromV6(&cardSet[cardUpV8(cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i))))], &c6->card[i]);
     }
   } else if (cardValidOld(c3, 3)) {
     for (int i = 0; i < CARD_SLOTS - 2; i++) {
-      cardFromV3(&cardSet[cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i)))], &c3->card[i]);
+      cardFromV3(&cardSet[cardUpV8(cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i))))], &c3->card[i]);
     }
   } else if (cardValidOld(c3, 2)) {
     for (int i = 0; i < CARD_SLOTS - 2; i++) {
-      cardFromV3(&cardSet[cardShiftV7(cardOrderV5(cardShiftV4(cardOrderV2((uint8_t)i))))],
+      cardFromV3(&cardSet[cardUpV8(cardShiftV7(cardOrderV5(cardShiftV4(cardOrderV2((uint8_t)i)))))],
                 &c3->card[i]);
     }
   }
@@ -1521,9 +1609,14 @@ void cfgInit() {
   // startPattern and seqCard also count cards by position, so they need
   // the same maps the card block above took: version 2 or nothing takes
   // all four; 3 and 4 take the shift plus the two newest; 5 takes the
-  // two newest; 6 and 7 take only the newest, cardShiftV7. Zero maps to
-  // zero, so a factory fresh flash is unaffected.
-  if (!cardValid(c)) {
+  // two newest; 6 and 7 take cardShiftV7; every version before 9 then
+  // takes cardMoveV8, and every version before 10 cardMoveV9. Zero maps
+  // to zero, so a factory fresh flash is unaffected.
+  if (cardValidV9(c)) {
+    startPattern = cardMoveV9((uint8_t)startPattern);
+    for (int i = 0; i < seqCount; i++) seqCard[i] = cardMoveV9(seqCard[i]);
+  } else if (!cardValid(c)) {
+    if (!cardValidV8(c)) {
     if (!cardValidV7(c) && !cardValidV6(c6)) {
       if (!cardValidV4(c6) && !cardValidV5(c6) && !cardValidOld(c3, 3)) {
         startPattern = cardOrderV2((uint8_t)startPattern);
@@ -1538,6 +1631,9 @@ void cfgInit() {
     }
     startPattern = cardShiftV7((uint8_t)startPattern);
     for (int i = 0; i < seqCount; i++) seqCard[i] = cardShiftV7(seqCard[i]);
+    }
+    startPattern = cardUpV8((uint8_t)startPattern);
+    for (int i = 0; i < seqCount; i++) seqCard[i] = cardUpV8(seqCard[i]);
   }
 
   const TickerBlock *tk = tickInFlash();
@@ -1560,23 +1656,32 @@ void cfgInit() {
   if (colorValid(cb)) {
     memcpy(colorSet, cb->card, sizeof(colorSet));
     memcpy(clockColors, cb->clock, sizeof(clockColors));
+  } else if (colorValidV6(cb)) {
+    // From before BATC Legacy moved.
+    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardMoveV9((uint8_t)i)] = cb->card[i];
+    memcpy(clockColors, cb->clock, sizeof(clockColors));
+  } else if (colorValidV5(cb)) {
+    // From before the BATC card moved: the colours belong to card
+    // positions, so they take the same move.
+    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardUpV8((uint8_t)i)] = cb->card[i];
+    memcpy(clockColors, cb->clock, sizeof(clockColors));
   } else if (colorValidV4(cb4)) {
-    // From before the TV clock's own colours: the cards carry across
-    // as they are, the clock starts at its defaults.
-    memcpy(colorSet, cb4->card, sizeof(colorSet));
+    // From before the TV clock's own colours: the clock starts at its
+    // defaults, the cards take the BATC card's move.
+    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardUpV8((uint8_t)i)] = cb4->card[i];
   } else if (colorValidV3(cb4)) {
     // From before Crosshatch entered right after Multiburst: the
     // colours belong to card positions, so they take the card records'
     // newest reorder.
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      colorSet[cardShiftV7((uint8_t)i)] = cb4->card[i];
+      colorSet[cardUpV8(cardShiftV7((uint8_t)i))] = cb4->card[i];
     }
   } else if (colorValidV2(cb4)) {
     // From before Mixed bars and Picdream moved to right after TVE: the
     // colours belong to card positions, so they take the card records'
     // reorder.
     for (int i = 0; i < CARD_SLOTS - 1; i++) {
-      colorSet[cardShiftV7(cardOrderV5((uint8_t)i))] = cb4->card[i];
+      colorSet[cardUpV8(cardShiftV7(cardOrderV5((uint8_t)i)))] = cb4->card[i];
     }
   } else if (colorValidV1(cb4)) {
     // From before the Mixed bars card: the same shift as the card
@@ -1584,7 +1689,7 @@ void cfgInit() {
     // shifts chain here, so this loop stops a slot earlier; see the
     // same note at the CARD_VERSION 4 branch above.
     for (int i = 0; i < CARD_SLOTS - 2; i++) {
-      colorSet[cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i)))] = cb4->card[i];
+      colorSet[cardUpV8(cardShiftV7(cardOrderV5(cardShiftV4((uint8_t)i))))] = cb4->card[i];
     }
   } else if (tickValid(tk) || tickValidV5((const TickerBlockV5 *)tk)) {
     // A record from the one build with a single global ticker colour:
@@ -1600,10 +1705,14 @@ void cfgInit() {
 
   const ExtraBlock *xb = extraInFlash();
   if (extraValid(xb)) {
+    memcpy(legacyText, xb->legacyText, TEXT_MAX);
+    legacyText[TEXT_MAX - 1] = 0;
+  }
+  if (extraValid(xb) || extraValidV4(xb)) {
     memcpy(pcmText, xb->pcmText, PCM_TEXT_MAX);
     pcmText[PCM_TEXT_MAX - 1] = 0;
   }
-  if (extraValid(xb) || extraValidV3(xb)) {
+  if (extraValid(xb) || extraValidV4(xb) || extraValidV3(xb)) {
     memcpy(insertLeft, xb->left, TEXT_MAX);
     memcpy(insertRight, xb->right, TEXT_MAX);
     insertLeft[TEXT_MAX - 1] = 0;
@@ -1725,6 +1834,7 @@ static void fillPages(uint8_t *page) {
   xb.chromaFilter = (uint8_t)advChromaFilterIndex();
   xb.spare[0] = slideFadeOn ? 0 : 1;   // see the note at cfgInit()'s own read of it
   memcpy(xb.pcmText, pcmText, PCM_TEXT_MAX);
+  memcpy(xb.legacyText, legacyText, TEXT_MAX);
   xb.spare[1] = dstAutoOn ? 1 : 0;     // see the note at cfgInit()'s own read of it
   xb.crc = extraCrc(&xb);
 

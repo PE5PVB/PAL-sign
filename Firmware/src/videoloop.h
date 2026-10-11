@@ -55,6 +55,14 @@ extern volatile uint32_t videoConsumedCount;
 static const uint32_t VIDEO_RENORM_STEP = 38750u * 48491u;
 extern volatile bool videoRenormRequest;
 extern volatile uint32_t videoStallCount;
+extern volatile uint32_t videoResyncCount;
+extern volatile uint64_t videoCore1WaitUs;
+
+// How far ahead of the streamer the producer may build: VIDEO_RING_SIZE
+// - 3, since the chained DMA always has two rows under way, and one
+// less on a photograph, so that core1 copying rows in ahead (video.cpp)
+// always has a slot to itself before core0 gets to it.
+extern volatile int32_t videoProducerMaxAhead;
 extern volatile bool videoRestartRequest;
 
 extern bool videoDisplayMayWork;
@@ -89,6 +97,12 @@ extern volatile bool videoParked;
 
 void videoLoadLine(int ch, bool blank);
 void videoKickChain(int ch);
+// Copies a photograph's rows into the ring ahead of core0 until nextCh,
+// the channel to reload next, has finished its row; with mayStart false
+// only a row already begun is carried on. videoPrefillUrgent() first
+// finishes the row core0 is waiting for, if any. See video.cpp.
+void videoPrefillUrgent(int nextCh);
+void videoPrefillStep(int nextCh, bool mayStart);
 void videoSflStep();
 void videoCountTxStall();
 

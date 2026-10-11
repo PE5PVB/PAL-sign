@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace PalSign;
 
@@ -36,6 +37,8 @@ public partial class CardsTab
         });
     }
 
+    private const int NoAnswerSeconds = 4;
+
     private void Connect()
     {
         string? p = _port();
@@ -43,9 +46,22 @@ public partial class CardsTab
 
         // The clock is set first, so a card fetched below carries this
         // computer's time; the board has no battery and restarts at the
-        // time in config.h.
-        try { BoardConfig.SetClock(p, DateTime.Now, CancellationToken.None); }
-        catch (Exception ex) { Trace.Say("the clock was not set: " + ex.Message); }
+        // time in config.h. It is also the handshake: a board that does
+        // not answer within a few seconds (it waits up to 3 s for the port
+        // at startup) is reported now rather than after the long waits of
+        // the read below.
+        try { BoardConfig.SetClock(p, DateTime.Now, CancellationToken.None, NoAnswerSeconds); }
+        catch (Exception ex)
+        {
+            Trace.Say("no answer on " + p + ": " + ex.Message);
+            Post(() =>
+            {
+                Say("");
+                MessageBox.Show(FindForm(), string.Format(UiText.NoAnswerFmt, p, NoAnswerSeconds, ex.Message),
+                                UiText.NoAnswerTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            });
+            return;
+        }
 
         Trace.Say("--- Connect ---");
         var cfg = BoardConfig.Read(p, CancellationToken.None);
@@ -109,6 +125,7 @@ public partial class CardsTab
         finally { _loading = false; }
 
         SetEnabled(true);
+        EqualPreviewSize();
         if (_list.Items.Count > 0)
         {
             // By card number, not by list position: a card the board

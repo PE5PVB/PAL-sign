@@ -183,6 +183,18 @@ void __not_in_flash_func(romRenderFrom)(const uint32_t *pal, const uint16_t *idx
   }
 }
 
+void __not_in_flash_func(romPhasePatch)(uint8_t *base, const uint8_t *s) {
+  for (int r = *s++; r > 0; r--) {
+    uint8_t *p = base + 4 * (s[0] | (s[1] << 8));
+    int n = s[2];
+    s += 3;
+    for (; n > 0; n--, p += 4) {
+      p[0] = *s++;   // Cb
+      p[2] = *s++;   // Cr
+    }
+  }
+}
+
 void __not_in_flash_func(romRenderRow)(uint8_t *base, int y) {
   if (romFromFlash) {
     romRenderFrom(romSrc.pal, romSrc.idx, romSrc.len, romSrc.start, romSrc.line,

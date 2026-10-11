@@ -75,7 +75,6 @@ static const char LANG_CFG_FAILED_NO_SUCH_SETTING[] = "[cfg] failed, no such set
 static const char LANG_CFG_FAILED_NO_SUCH_TELETEXT[] = "[cfg] failed, no such teletext row";
 static const char LANG_CFG_FAILED_THE_NAME_IS[] = "[cfg] failed, the name is too long";
 static const char LANG_CFG_FAILED_THIS_CARD_HAS[] = "[cfg] failed, this card has no place for the moving line";
-static const char LANG_CFG_FAILED_TRANSPARENT_DOES_NOT[] = "[cfg] failed, transparent does not fit on a photograph";
 static const char LANG_CFG_FONTS_D[] = "[cfg] fonts %d\n";
 static const char LANG_CFG_G924BARS_D[] = "[cfg] g924bars %d\n";
 static const char LANG_CFG_INSERTS_D[] = "[cfg] inserts %d\n";
@@ -112,10 +111,13 @@ static const char LANG_CLOCK_VALUE_OUT_OF_RANGE[] = "[clock] value out of range,
 static const char LANG_CLOSE_MENU[] = "Close menu";
 static const char LANG_CONTEST1[] = "contest1";
 static const char LANG_PCMTEXT[] = "pcmtext";
+static const char LANG_LEGACYTEXT[] = "legacytext";
+static const char LANG_FWVERSION[] = "version";
 static const char LANG_CONTEST2[] = "contest2";
 static const char LANG_CONTEST_BOTTOM_LINE_S[] = "[contest] bottom line: %s\n";
 static const char LANG_CONTEST_FIRST_LINE[] = "Contest first line";
 static const char LANG_PCM_TEXT[] = "PCM text";
+static const char LANG_THIRD_LINE[] = "Third line";
 static const char LANG_CONTEST_NUMBER[] = "Contest number";
 static const char LANG_CONTEST_NUMBER_04D[] = "[contest] number: %04d\n";
 static const char LANG_CONTEST_SECOND_LINE[] = "Contest second line";
@@ -362,6 +364,13 @@ static const char LANG_TICKER_TEXT[] = "[ticker] text ";
 static const char LANG_TICKER_Y[] = "Ticker Y";
 static const char LANG_TIMED_OUT[] = "timed out";
 static const char LANG_TIMING_MIN_LU_US_AVG[] = "[timing] min=%lu us  avg=%lu us  worst=%lu us  (budget %lu us)  over budget: %lu / %lu rows  starves=%lu  txstall=%lu  chain-restart=%lu  emergency-brake=%lu  flash-rows=%lu  load-stall=%lu  cfg-deviation=%lu\n";
+static const char LANG_TICKER_CORE1[] =
+    "[ticker] transparent on core1: %lu band rows, %lu went out unfinished, %lu us of core1 each\n";
+static const char LANG_PRODUCER_RESYNC[] =
+    "[timing] producer hooked back on after falling behind the streamer: %lu times since start\n";
+static const char LANG_PREFILL[] =
+    "[prefill] photograph rows: %lu copied in by core1, %lu by core0 itself, %lu cut by a reload, core0 waited %lu times, %lu us\n";
+static const char LANG_TIMING_CORES[] = "[timing] core0 waits %.1f%%, builds %.1f%%; core1 waits %.1f%%\n";
 static const char LANG_TIMING_WINDOW[] = "[timing] this window: %lu rows, avg=%lu us, worst=%lu us\n";
 static const char LANG_TIMING_REPORT_IS_S[] = "Timing report is %s (key d).  ? lists every key.\n";
 static const char LANG_TIMING_REPORT_S[] = "   timing report %s\n";
@@ -491,7 +500,6 @@ static const char LANG_KIND_CFG[] = "cfg";
 static const char LANG_KIND_BOTTOM_BOX[] = "bottom box";
 static const char LANG_ID_NO_PLACE_ON_CARD[] = "  (this card has no place for it)";
 static const char LANG_ID_OFF_ON_THIS_CARD[] = "  (OFF on this card, key h)";
-static const char LANG_TRANSPARENT_NOT_ON_PHOTO[] = "  (transparent does not fit on a photograph)";
 
 // The system-level on-device menu (MENU_TEXT_FIELDS/MENU_TOGGLES/
 // MENU_CYCLES), separate from the per-card menu's cmAdd*() labels.
@@ -554,6 +562,8 @@ static const char LANG_CARD_TVE[] = "TVE Card";
 static const char LANG_CARD_PCM_AUDIO[] = "Ham PCM";
 static const char LANG_CARD_SONY_PCM[] = "Sony PCM";
 static const char LANG_CARD_TV_CLOCK[] = "TV clock";
+static const char LANG_CARD_BATC[] = "BATC card";
+static const char LANG_CARD_BBCMICRO[] = "BATC Legacy";
 static const char LANG_COLOR_BLACK[] = "Black";
 static const char LANG_TEXT_POSITION[] = "Text";
 static const char LANG_TOP_RIGHT[] = "Top right";

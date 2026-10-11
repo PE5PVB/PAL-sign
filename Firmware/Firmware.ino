@@ -75,11 +75,12 @@
 // Order is stored by position: per-card settings, start card and
 // sequence steps all reference a card by its index here. Reordering
 // or inserting needs a new CARD_VERSION and a migration in
-// settings.cpp (CARD_ORDER_V2, cardShiftV4, CARD_ORDER_V5, cardShiftV7).
+// settings.cpp (CARD_ORDER_V2, cardShiftV4, CARD_ORDER_V5, cardShiftV7,
+// cardMoveV8, cardMoveV9).
 static const Pattern *const PATTERNS[] = {
     &PATTERN_PM5644G00,  &PATTERN_FUBKNOCIRCLE, &PATTERN_FUBK4X3,   &PATTERN_BARSRED,
     &PATTERN_TESTCARDF,  &PATTERN_TESTCARDG,    &PATTERN_TVE,
-    &PATTERN_MIXEDBAR,   &PATTERN_PICDREAM,
+    &PATTERN_MIXEDBAR,   &PATTERN_PICDREAM,     &PATTERN_BATC,      &PATTERN_BBCMICRO,
     &PATTERN_PM5644G924, &PATTERN_FUBK16X9,     &PATTERN_TESTCARDW, &PATTERN_INTERNBAR,
     &PATTERN_PM5644G913, &PATTERN_EBUBW,        &PATTERN_PULSEBAR,  &PATTERN_SINXX,
     &PATTERN_MULTIBURST, &PATTERN_CROSSHATCH,   &PATTERN_CONTEST,
@@ -93,6 +94,10 @@ static const int PATTERN_COUNT = (int)(sizeof(PATTERNS) / sizeof(PATTERNS[0]));
 // The worst row build time since the last timing report; see the
 // report for why the lifetime figures are not enough.
 static volatile uint32_t timingWindowWorstUs = 0;
+// Core0's time spent waiting for room in the ring, summed; with core1's
+// wait on the DMA (videoCore1WaitUs) and the row build time it gives the
+// report its line on how busy each core is.
+static uint64_t core0WaitUs = 0;
 static_assert(CFG_PATTERN >= 0 && CFG_PATTERN < PATTERN_COUNT, "CFG_PATTERN out of range");
 
 const Pattern *activePattern = PATTERNS[CFG_PATTERN];
@@ -218,6 +223,18 @@ static int nextPattern(int from, int step) {
 
 // THIS DOES NOT WRITE ANYTHING; remembering the choice is the caller's
 // business, a picture earlier (see the card change in videoFrameHook()).
+// The ROM cards' table goes to the ticker's glyphs on a photograph slot,
+// which never touches it; every other card may want it for itself.
+static void tickerScratchFor(int i) {
+  if (customSlotOf(PATTERNS[i]) >= 0) {
+    uint32_t bytes = 0;
+    uint8_t *p = romBorrowScratch(&bytes);
+    tickerSetScratch(p, bytes);
+  } else {
+    tickerSetScratch(nullptr, 0);
+  }
+}
+
 static void selectPattern(int i) {
   if (i < 0 || i >= PATTERN_COUNT) return;
 
@@ -244,13 +261,15 @@ static void selectPattern(int i) {
   movingLineClearInUse();
   aspectSet(cfgCardAspect(-1));
   insertSetMode(cfgCardInsert(-1));
-  // An uploaded photograph reads its rows out of flash; a transparent
-  // band on top does not fit the row budget.
-  tickerAllowTransparent(customSlotOf(PATTERNS[i]) < 0);
+  // An uploaded photograph leaves the ROM cards' table idle, which holds
+  // the big face's glyphs for core1; any other card may use that table in
+  // its init() below, after tickerBegin() has let go of it.
+  tickerScratchFor(i);
   textInkRefresh();
   textSetFont(cfgCardTextFont(-1));
   tickerBegin();
 
+  videoSetPrefill(nullptr);   // a photograph's init() sets it
   PATTERNS[i]->init();
   // A reload asked for on the way here is already answered by the
   // init() just done; without this the frame hook would run it again.
@@ -1332,12 +1351,14 @@ static void printSettings() {
   cfgLine(LANG_CFG_SLOTS_D, PHOTO_SLOTS);
   cfgLine(LANG_CFG_TELETEXTROWS_D, TT_ROWS);
 
+  cfgLineText(LANG_FWVERSION, CFG_VERSION);   // the PC tool shows it; read-only
   cfgLineText(LANG_TEXTID, cfgTextId());
   cfgLineText(LANG_TEXTSUB, cfgTextSub());
   cfgLineText(LANG_TICKERTEXT, cfgTickerText());
   cfgLineText(LANG_CONTEST1, cfgContestText1());
   cfgLineText(LANG_CONTEST2, cfgContestText2());
   cfgLineText(LANG_PCMTEXT, cfgPcmText());
+  cfgLineText(LANG_LEGACYTEXT, cfgLegacyText());
   cfgLineText(LANG_INSERTLEFT, cfgInsertLeft());
   cfgLineText(LANG_INSERTRIGHT, cfgInsertRight());
   for (int r = 1; r <= TT_ROWS; r++) {
@@ -1415,7 +1436,7 @@ static void printSettings() {
     // 4: BBC Test Card F/W's own photo switch, 5: the Sony PCM card's
     // 16 bit and pre-emphasis switches (its "option" bits 0 and 1),
     // 6: Ham PCM's quality, 7: the TV clock (option bit 0: text at the
-    // bottom; facecolor/backcolor).
+    // bottom; facecolor/backcolor), 8: BATC Legacy's third line.
     // Not a CARD_TRAIT bit, that byte is full; checked by pattern
     // identity instead.
     const uint8_t tr = cfgCardTraits(i);
@@ -1426,6 +1447,7 @@ static void printSettings() {
                   : (PATTERNS[i] == &PATTERN_SONYPCM) ? 5
                   : (PATTERNS[i] == &PATTERN_PCMAUDIO) ? 6
                   : (PATTERNS[i] == &PATTERN_TVCLOCK) ? 7
+                  : (PATTERNS[i] == &PATTERN_BBCMICRO) ? 8
                                               : 0;
     // An empty photograph slot always reads as switched off; see
     // cardIsEnabled().
@@ -1515,12 +1537,6 @@ static void setSettingFromCommand(const char *line) {
       cfgSetCardShowSub(card, num != 0);
       needsText = true;
     } else if (!strcmp(field, "ticker")) {
-      // Transparent is not offered on an uploaded photograph; see the
-      // note at the n key.
-      if (num == 2 && customSlotOf(PATTERNS[card]) >= 0) {
-        Serial.println(LANG_CFG_FAILED_TRANSPARENT_DOES_NOT);
-        return;
-      }
       cfgSetCardTickerOf(card, num);
       needsBand = true;
     } else if (!strcmp(field, "tickery")) {
@@ -1717,6 +1733,8 @@ static void setSettingFromCommand(const char *line) {
     cfgSetContestText2(val);
   } else if (!strcmp(name, "pcmtext")) {
     cfgSetPcmText(val);
+  } else if (!strcmp(name, "legacytext")) {
+    cfgSetLegacyText(val);
   } else if (!strcmp(name, "insertleft")) {
     cfgSetInsertLeft(val);
   } else if (!strcmp(name, "insertright")) {
@@ -1873,7 +1891,8 @@ static void cardDumpStep() {
   // flash costs more than the slot has.
   if (romCopyPending()) return;
   // The bare card, without aspect ratio or ticker: the PC applies the
-  // letterbox and squeeze itself.
+  // letterbox and squeeze itself. Phase frame 0 of a two-frame card.
+  videoSetPhaseRow(false);
   activePattern->renderRow((uint8_t *)dumpRowWords, dumpRow);
   // Run length coded: a count of 1-255 followed by the 32 bit word it
   // repeats; see CardCache.cs on the PC side.
@@ -2124,14 +2143,9 @@ static void handleSerialChar(int ch) {
     }
   } else if (ch == 'n') {
     // Off, a bar of its own, straight over the card, round again; kept
-    // per card. Transparent is skipped on an uploaded photograph: the
-    // band on top of a flash-read row costs more than a row has.
-    const bool photo = customSlotOf(activePattern) >= 0;
-    int next = (tickerMode() + 1) % TICKER_MODE_COUNT;
-    if (photo && next == TICKER_TRANSPARENT) next = TICKER_OFF;
-    tickerSetMode(next);
-    report(LANG_TICKER_S_ON_S_S, tickerModeName(), activePattern->name,
-           photo ? LANG_TRANSPARENT_NOT_ON_PHOTO : "");
+    // per card.
+    tickerSetMode((tickerMode() + 1) % TICKER_MODE_COUNT);
+    report(LANG_TICKER_S_ON_S_S, tickerModeName(), activePattern->name, "");
   } else if (ch == 'm') {
     // The moving line: a white stripe sweeping through a black box,
     // one second per sweep. Only a card with a box for it has this.
@@ -2833,6 +2847,8 @@ static const char *cmHamQualityName(int i) {
   return i == 1 ? LANG_HAM_LQ : i == 2 ? LANG_HAM_VOICE : i == 3 ? LANG_HAM_NARROW : LANG_HAM_HQ;
 }
 static void cmPcmTextSet(const char *s) { cfgSetPcmText(s); }
+static const char *cmLegacyTextGet() { return cfgLegacyText(); }
+static void cmLegacyTextSet(const char *s) { cfgSetLegacyText(s); }
 // The TV clock: text top or bottom right (option bit 0), and its own
 // two colours, which the card picks up itself once a picture.
 static int cmClockTextIdx() { return cfgCardOption(cardMenuCard) & 1; }
@@ -2964,11 +2980,11 @@ static void cardMenuBuild() {
   // the same rows CardsTab.cs hides for own=5.
   const bool raw = PATTERNS[cardMenuCard]->rawSignal;
   if (!raw) {
-    // Transparent does not fit on an uploaded photograph (see the same
-    // guard on the "card.N.ticker" serial set, setSettingFromCommand()),
-    // so a photo slot's own cycle stops one short of it.
-    const int tickerModeCount = (customSlotOf(PATTERNS[cardMenuCard]) >= 0) ? 2 : 3;
-    cmAddCycle(LANG_TICKER, cmTickerModeIdx, cmTickerModeSet, tickerModeCount, cmTickerModeName);
+    // Transparent does not fit on an uploaded photograph in a raster face
+    // (see the same guard on the "card.N.ticker" serial set,
+    // setSettingFromCommand()), so such a slot's own cycle stops one
+    // short of it.
+    cmAddCycle(LANG_TICKER, cmTickerModeIdx, cmTickerModeSet, 3, cmTickerModeName);
     cmAddSlider(LANG_TICKER_Y, cmTickerYGet, cmTickerYSet, 0, 576, 4);
     cmAddSlider(LANG_TICKER_SPEED, cmTickerSpeedGet, cmTickerSpeedSet, -8, 8, 1);
     cmAddCycle(LANG_TICKER_SIZE, cmTickerSizeIdx, cmTickerSizeSet, 5, cmTickerSizeName);
@@ -3028,6 +3044,9 @@ static void cardMenuBuild() {
   if (PATTERNS[cardMenuCard] == &PATTERN_PCMAUDIO) {
     cmAddCycle(LANG_HAM_QUALITY, cmHamQualityIdx, cmHamQualitySet, 4, cmHamQualityName);
     cmAddText(LANG_PCM_TEXT, cmPcmTextGet, cmPcmTextSet, PCM_TEXT_MAX - 1);
+  }
+  if (PATTERNS[cardMenuCard] == &PATTERN_BBCMICRO) {
+    cmAddText(LANG_THIRD_LINE, cmLegacyTextGet, cmLegacyTextSet, TEXT_MAX_CHARS);
   }
 }
 
@@ -3583,7 +3602,7 @@ void videoFrameHook() {
   // with the ADV's field sequence. Bit 1 of the counter changes once per
   // frame (25 Hz). Only read for such a card: at 100 kHz the I2C read
   // takes core0 some 0.4 ms, about six rows of production, every frame.
-  if (activePattern->phaseBars) videoSetPhaseFrame((advReadFieldCount() >> 1) & 1);
+  if (activePattern->phaseFrames) videoSetPhaseFrame((advReadFieldCount() >> 1) & 1);
 
   // The row-counter wrap guard, first half; see VIDEO_RENORM_STEP in
   // videoloop.h. Core1 answers within a row (its videoLoadLine runs
@@ -3854,62 +3873,104 @@ void videoFrameHook() {
   // still); both just pause the show.
   if (slideshowOn && encoderCandidate < 0 && !dumpActive && !menuOpen) slideshowStep();
 
-  // The timing report, non-blocking: only written when the USB buffer
-  // can take it straight away, else skipped.
+  // The timing report, one line a picture. Written in one go it was
+  // 5 ms of USB writes on this core, more than the ring buffer holds
+  // (58 rows, 3.7 ms), and the report starved the picture it measured;
+  // availableForWrite() guards against a full buffer, not against the
+  // time the writes take. The figures are taken together when the two
+  // seconds are up, so the lines still belong to one window.
   if (!timingOn) return;
   static uint32_t lastReport = 0;
-  uint32_t now = millis();
-  if (now - lastReport < 2000) return;
-  lastReport = now;
-
-  VideoStats s;
-  videoGetStats(&s);
-  // 260 was just enough for the old message; two fields have been added since.
-  char msg[340];
-  int n = snprintf(msg, sizeof(msg),
-                   LANG_TIMING_MIN_LU_US_AVG,
-                   (unsigned long)s.minUs, (unsigned long)s.avgUs, (unsigned long)s.worstUs,
-                   (unsigned long)VIDEO_LINE_BUDGET_US, (unsigned long)s.overBudget,
-                   (unsigned long)s.lines, (unsigned long)s.starves, (unsigned long)s.txStalls,
-                   (unsigned long)s.chainRestarts,
-                   (unsigned long)s.producerStalls,
-                   (unsigned long)s.flashLines, (unsigned long)s.loadStalls,
-                   (unsigned long)cfgDeviations);
-  if (Serial && n > 0 && Serial.availableForWrite() >= n) Serial.write(msg, n);
-
-  // The same three figures over this report window only: the lifetime
-  // average above hides a card that is slow right now behind a million
-  // fast rows before it (found when the Sony PCM card starved the ring
-  // while avg still read 38 us).
-  {
+  static int reportLine = -1;   // the next line to write, -1 between reports
+  static VideoStats s;
+  static unsigned long winRows = 0, winAvg = 0, winWorst = 0;
+  static bool havePct = false;
+  static double pct0 = 0, pctBuild = 0, pct1 = 0;   // how busy each core is
+  static uint32_t tr = 0, tsum = 0, tworst = 0, tgl = 0;
+  static uint32_t orows = 0, olate = 0, ous = 0;
+  static uint32_t p1 = 0, p0 = 0, pd = 0, pw = 0, pu = 0;
+  if (reportLine < 0) {
+    const uint32_t now = millis();
+    if (now - lastReport < 2000) return;
+    lastReport = now;
+    videoGetStats(&s);
+    // The same three figures over this report window only: the lifetime
+    // average hides a card that is slow right now behind a million fast
+    // rows before it (found when the Sony PCM card starved the ring
+    // while avg still read 38 us).
     static uint64_t lastSum = 0;
     static uint32_t lastCount = 0;
     const uint64_t sum = videoSumBuildUs;
     const uint32_t cnt = videoSampleCount;
-    const uint32_t rows = cnt - lastCount;
-    const unsigned long avg = rows ? (unsigned long)((sum - lastSum) / rows) : 0;
-    n = snprintf(msg, sizeof(msg), LANG_TIMING_WINDOW, (unsigned long)rows, avg,
-                 (unsigned long)timingWindowWorstUs);
-    if (Serial && n > 0 && Serial.availableForWrite() >= n) Serial.write(msg, n);
+    winRows = cnt - lastCount;
+    winAvg = winRows ? (unsigned long)((sum - lastSum) / winRows) : 0;
+    winWorst = timingWindowWorstUs;
+    timingWindowWorstUs = 0;
+    static uint64_t lastWall = 0, last0 = 0, last1 = 0;
+    const uint64_t wall = time_us_64(), w0 = core0WaitUs, w1 = videoCore1WaitUs;
+    havePct = lastWall != 0;
+    if (havePct) {
+      const double span = (double)(wall - lastWall);
+      pct0 = 100.0 * (double)(w0 - last0) / span;
+      pctBuild = 100.0 * (double)(sum - lastSum) / span;
+      pct1 = 100.0 * (double)(w1 - last1) / span;
+    }
+    lastWall = wall;
+    last0 = w0;
+    last1 = w1;
     lastSum = sum;
     lastCount = cnt;
-    timingWindowWorstUs = 0;
+    // WHAT THE TICKER BAND REALLY COSTS, counted on the board. What fits
+    // in a row has been worked out wrongly three times over here, so this
+    // is measured: the time in the ticker itself, without the card
+    // underneath, and how many glyphs it drew for it. Reading clears it,
+    // so this covers the period since the last report.
+    tickerTakeStats(&tr, &tsum, &tworst, &tgl);
+    tickerTakeCore1Stats(&orows, &olate, &ous);
+    videoTakePrefillStats(&p1, &p0, &pd, &pw, &pu);
+    reportLine = 0;
   }
 
-  // WHAT THE TICKER BAND REALLY COSTS, counted on the board. What fits in
-  // a row has been worked out wrongly three times over here, so this is
-  // measured: the time in the ticker itself, without the card underneath,
-  // and how many glyphs it drew for it. Reading clears it, so this covers
-  // the period since the last report.
-  uint32_t tr, tsum, tworst, tgl;
-  tickerTakeStats(&tr, &tsum, &tworst, &tgl);
-  if (tr) {
-    n = snprintf(msg, sizeof(msg),
-                 LANG_TICKER_S_LU_BAND_ROWS,
-                 tickerModeName(), (unsigned long)tr, (unsigned long)(tsum / tr),
-                 (unsigned long)tworst, (unsigned long)(tgl / tr));
-    if (Serial && n > 0 && Serial.availableForWrite() >= n) Serial.write(msg, n);
+  char msg[340];
+  int n = 0;
+  switch (reportLine++) {
+    case 0:
+      n = snprintf(msg, sizeof(msg), LANG_TIMING_MIN_LU_US_AVG, (unsigned long)s.minUs,
+                   (unsigned long)s.avgUs, (unsigned long)s.worstUs,
+                   (unsigned long)VIDEO_LINE_BUDGET_US, (unsigned long)s.overBudget,
+                   (unsigned long)s.lines, (unsigned long)s.starves, (unsigned long)s.txStalls,
+                   (unsigned long)s.chainRestarts, (unsigned long)s.producerStalls,
+                   (unsigned long)s.flashLines, (unsigned long)s.loadStalls,
+                   (unsigned long)cfgDeviations);
+      break;
+    case 1:
+      n = snprintf(msg, sizeof(msg), LANG_TIMING_WINDOW, winRows, winAvg, winWorst);
+      break;
+    case 2:
+      if (havePct)
+        n = snprintf(msg, sizeof(msg), LANG_TIMING_CORES, pct0, pctBuild, pct1);
+      break;
+    case 3:
+      if (orows || olate)
+        n = snprintf(msg, sizeof(msg), LANG_TICKER_CORE1, (unsigned long)orows, (unsigned long)olate,
+                     (unsigned long)(orows ? ous / orows : 0));
+      break;
+    case 4:
+      if (videoResyncCount) n = snprintf(msg, sizeof(msg), LANG_PRODUCER_RESYNC, (unsigned long)videoResyncCount);
+      break;
+    case 5:
+      if (p1 || p0 || pd)
+        n = snprintf(msg, sizeof(msg), LANG_PREFILL, (unsigned long)p1, (unsigned long)p0, (unsigned long)pd,
+                     (unsigned long)pw, (unsigned long)pu);
+      break;
+    default:
+      if (tr)
+        n = snprintf(msg, sizeof(msg), LANG_TICKER_S_LU_BAND_ROWS, tickerModeName(), (unsigned long)tr,
+                     (unsigned long)(tsum / tr), (unsigned long)tworst, (unsigned long)(tgl / tr));
+      reportLine = -1;
+      break;
   }
+  if (n > 0 && Serial && Serial.availableForWrite() >= n) Serial.write(msg, n);
 }
 
 // What memory this board has, reported rather than looked up: flash
@@ -4098,7 +4159,7 @@ void setup() {
   for (int i = 0; i < PATTERN_COUNT; i++) {
     uint8_t t = 0;
     if (PATTERNS[i] == &PATTERN_CONTEST) t |= CARD_TRAIT_CONTEST;
-    // The fifteen that draw the identification: also observed through
+    // The seventeen that draw the identification: also observed through
     // cfgTextIdShown() while a card lays itself out, which wins where
     // there is one; written out here too since a never-shown card has
     // nothing to observe. cfgSetActiveCard() complains if this list is wrong.
@@ -4109,15 +4170,17 @@ void setup() {
         PATTERNS[i] == &PATTERN_TESTCARDG || PATTERNS[i] == &PATTERN_EBUBW ||
         PATTERNS[i] == &PATTERN_BARSRED || PATTERNS[i] == &PATTERN_MIXEDBAR ||
         PATTERNS[i] == &PATTERN_PICDREAM || PATTERNS[i] == &PATTERN_PCMAUDIO ||
-        PATTERNS[i] == &PATTERN_TVCLOCK)
+        PATTERNS[i] == &PATTERN_TVCLOCK || PATTERNS[i] == &PATTERN_BATC ||
+        PATTERNS[i] == &PATTERN_BBCMICRO)
       t |= CARD_TRAIT_ID;
-    // THE TEN THAT DRAW THE SECOND TEXT LINE, found the same way:
+    // THE ELEVEN THAT DRAW THE SECOND TEXT LINE, found the same way:
     // grep -l cfgTextSubShown src/testcards/*.cpp
     if (PATTERNS[i] == &PATTERN_PM5644G00 || PATTERNS[i] == &PATTERN_PM5644G924 ||
         PATTERNS[i] == &PATTERN_FUBK4X3 || PATTERNS[i] == &PATTERN_FUBK16X9 ||
         PATTERNS[i] == &PATTERN_TESTCARDG || PATTERNS[i] == &PATTERN_TVE ||
         PATTERNS[i] == &PATTERN_EBUBW || PATTERNS[i] == &PATTERN_BARSRED ||
-        PATTERNS[i] == &PATTERN_PCMAUDIO || PATTERNS[i] == &PATTERN_TVCLOCK)
+        PATTERNS[i] == &PATTERN_PCMAUDIO || PATTERNS[i] == &PATTERN_TVCLOCK ||
+        PATTERNS[i] == &PATTERN_BBCMICRO)
       t |= CARD_TRAIT_SUB;
     // THE THREE THAT DRAW THE INSERT BOXES, found the same way:
     // grep -l insertPrepare src/testcards/*.cpp
@@ -4125,7 +4188,8 @@ void setup() {
         PATTERNS[i] == &PATTERN_TVE)
       t |= CARD_TRAIT_BOX;
     if (PATTERNS[i] == &PATTERN_PM5644G924) t |= CARD_TRAIT_G924;
-    if (PATTERNS[i] == &PATTERN_MIXEDBAR || PATTERNS[i] == &PATTERN_PICDREAM)
+    if (PATTERNS[i] == &PATTERN_MIXEDBAR || PATTERNS[i] == &PATTERN_PICDREAM ||
+        PATTERNS[i] == &PATTERN_BATC)
       t |= CARD_TRAIT_FIXEDFONT;
     // CARD_TRAIT_CARDG is handed out to nobody: the G was rebuilt from
     // the EPROM tables, the AP1/AP2 block was bbc-testcards' own. The
@@ -4230,7 +4294,7 @@ void setup() {
     // Before any card lays itself out: its identification setting is kept
     // per card and the init has to see the right one.
     cfgSetActiveCard(want);
-    tickerAllowTransparent(customSlotOf(PATTERNS[want]) < 0);
+    tickerScratchFor(want);
     // THE CARD BRINGS ITS OWN, here as well as in selectPattern(). This
     // path does not go through selectPattern, so without these three the
     // board came up on the remembered card with card 1's band and with
@@ -4378,9 +4442,10 @@ void loop() {
     videoRestartRequest = false;
     line = (videoProducedCount % VIDEO_LINES_PER_FRAME) + 1;
   }
-  // VIDEO_RING_SIZE - 3: the chained DMA always has two rows under way
-  // (being sent, and already loaded into the other channel), which the
-  // producer must keep away from.
+  // videoProducerMaxAhead, VIDEO_RING_SIZE - 3: the chained DMA always
+  // has two rows under way (being sent, and already loaded into the
+  // other channel), which the producer must keep away from; one less on
+  // a photograph, see videoloop.h.
   //
   // Waits for core1, but not forever: if the streamer never comes back
   // core0 would stand here for good and the whole board would be dead,
@@ -4392,13 +4457,25 @@ void loop() {
     // Signed compare: just after videoResume() the producer can be
     // briefly behind the streamer, which would flip the unsigned
     // difference to nearly 2^32 and trigger an unneeded half-second wait.
-    while ((int32_t)(videoProducedCount - videoConsumedCount) >= (int32_t)(VIDEO_RING_SIZE - 3)) {
+    while ((int32_t)(videoProducedCount - videoConsumedCount) >= videoProducerMaxAhead) {
       if (time_us_32() - t0 > 500000) {
         videoStallCount++;
         break;
       }
       tight_loop_contents();
     }
+    core0WaitUs += time_us_32() - t0;
+  }
+  // Behind the streamer, which sends blank rows meanwhile: nothing it
+  // builds now would ever go out, and only being faster than the line
+  // would ever close the gap. Hook back on instead, as after a flash
+  // write; the rows in between are lost either way. Not while the wrap
+  // guard is half way (core1 has yet to lower its counter), when the
+  // stock reads as hugely negative.
+  if (!videoRenormRequest && (int32_t)(videoProducedCount - videoConsumedCount) < 0) {
+    videoProducedCount = videoConsumedCount;
+    line = (videoProducedCount % VIDEO_LINES_PER_FRAME) + 1;
+    videoResyncCount++;
   }
 
   // Two answers, since the display's two halves are not equally
@@ -4510,17 +4587,34 @@ void setup1() {
 // whole of a write.
 //
 // Check after every change with arm-none-eabi-objdump -d on the elf:
-// loop1, videoLoadLine, lineKind, videoKickChain, videoSflStep and
+// loop1, videoLoadLine, blankLineFlags, videoKickChain, videoSflStep and
 // videoCountTxStall must all sit at an address in 0x2000_0000.., and no
 // bl out of them may go to 0x1000_0000..
 void __not_in_flash_func(loop1)() {
   static int arm = 0;      // 0 = reload channel A, 1 = channel B
   int ch = arm ? videoDmaChanB : videoDmaChanA;
   videoLoadLine(ch, false);
+  const uint32_t t0 = time_us_32();
   arm ^= 1;
   videoKickChain(ch);
   videoSflStep();
   videoCountTxStall();
+  const int next = arm ? videoDmaChanB : videoDmaChanA;
+  // A photograph row core0 stands waiting for comes before anything else.
+  videoPrefillUrgent(next);
+  // The other channel has just started a row: some 60 us before the next
+  // reload is due, and before the row loaded just now starts to be read;
+  // the transparent band may take 50 of them.
+  // What is left goes to copying a photograph's rows in ahead of core0,
+  // until the other channel has finished its row and wants reloading.
+  // Not a new row while the band is on: the overlay takes the turn, a
+  // row begun in a gap would be cut and only carried on after the next
+  // turn's overlay, with core0 waiting on it all that time. The hold
+  // outlasts the gaps the overlay leaves when it catches up with core0.
+  static int bandHold = 0;
+  if (tickerCore1Step(t0 + 55)) bandHold = 3;
+  else if (bandHold) bandHold--;
+  videoPrefillStep(next, bandHold == 0);
 
   // Core0 wants to write to flash: from here to the end of this loop no
   // instruction runs out of XIP space and interrupts are off; the chain

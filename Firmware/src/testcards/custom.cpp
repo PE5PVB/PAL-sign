@@ -15,6 +15,7 @@
 #include "../photoflash.h"
 #include "../gfx.h"
 #include "../pattern.h"
+#include "../video.h"
 
 static const uint32_t GREY_WORD = 0x80808080u;   // Y=Cb=Cr=0x80: neutral mid grey
 
@@ -26,10 +27,12 @@ static bool activeValid = false;
 static void customInit(int slot) {
   activeSlot = slot;
   activeValid = photoValid(slot);
+  videoSetPrefill(activeValid ? photoData(slot) : nullptr);   // core1 copies rows in ahead
 }
 
 static void customRenderRow(uint8_t *base, int y) {
   if (activeValid) {
+    if (videoRowPrefilled()) return;   // core1 put it there already
     memcpy(base, photoData(activeSlot) + (unsigned)y * (SCREEN_W * 2), SCREEN_W * 2);
     return;
   }

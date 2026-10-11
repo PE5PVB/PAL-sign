@@ -91,6 +91,7 @@ public partial class CardsTab
         if (name == "contest1") _cfg.Contest1 = value;
         if (name == "contest2") _cfg.Contest2 = value;
         if (name == "pcmtext") _cfg.PcmText = value;
+        if (name == "legacytext") _cfg.LegacyText = value;
         _pending[name] = value;
     }
 

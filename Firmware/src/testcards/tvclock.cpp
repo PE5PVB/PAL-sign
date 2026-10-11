@@ -17,6 +17,12 @@
 // this card is on). The buffers swap on the second; renderRow() only
 // expands the bytes.
 //
+// Interlace: an edge that is sharp from one line to the next lands in
+// one field only and flickers at 25 Hz (twitter), on a nearly level hand
+// as on the lettering. Both get the vertical [1,2,1]/4 the PC tool's
+// photo conversion uses (AntiTwitter in ImageConvert.cs): the clock as
+// it is drawn, the two text lines once at layout, into 4-bit maps.
+//
 // Aligned left: the gap between the clock and the left picture edge
 // equals the gap above and below it. The first and second text line go
 // to the right of it, at the top or the bottom (option bit 0). The
@@ -170,6 +176,20 @@ static uint8_t *pictures[2];   // in the borrowed table; null when it is too sma
 // some 400 bytes of RAM the build does not have to spare.
 static TextOverlay *idLine, *subLine;
 
+
+// A text line filtered into 4-bit coverage, w x h from (x, y), pixel
+// pairs as in the clock buffers; h is 0 when it did not fit, and the
+// line is then drawn as it is.
+struct TextMap {
+  int x, y, w, h;
+  uint8_t *cov;
+  YCbCr ink;
+  uint32_t backRgb;
+  uint8_t ly[16], lcb[16], lcr[16];   // coverage to colour over the background
+};
+static TextMap *maps;    // two, in the borrowed table like the rest
+static uint8_t *mapEnd;  // where it ends
+
 // Coverage 0..15 to colour, from the background to the clock colour;
 // also in the borrowed table.
 struct Palette {
@@ -178,6 +198,12 @@ struct Palette {
   uint32_t faceRgb, backRgb;   // what it was worked out from
 };
 static Palette *pal;
+
+// After the palette: the unfiltered coverage of the row above and of the
+// row being drawn, then the text scratch; the maps follow (see the init).
+static inline uint8_t *rawA() { return (uint8_t *)(pal + 1); }
+static inline uint8_t *rawB() { return rawA() + X_COUNT; }
+static inline uint8_t *textRaw() { return rawB() + X_COUNT; }
 
 static void paletteUpdate() {
   if (!pal) return;
@@ -250,11 +276,11 @@ struct SubRow {
   int n;
 };
 
-// Draws box row r (picture row Y_FIRST + r) of the current shapes into
-// out: ROW_BYTES of 4-bit coverage, low nibble first.
-static void drawRow(int r, uint8_t *out) {
-  uint8_t cov[X_COUNT];
-  memset(cov, 0, sizeof(cov));
+// Box row r (picture row Y_FIRST + r) of the current shapes as coverage,
+// 0 to SUB_ROWS x SUB_WEIGHT a pixel; nothing past the box.
+static void covRow(int r, uint8_t *cov) {
+  memset(cov, 0, X_COUNT);
+  if (r >= Y_COUNT) return;
   const int rowRel = Y_FIRST + r - (int)CENTRE_Y;
 
   Prepared crossing[SHAPES];
@@ -327,14 +353,126 @@ static void drawRow(int r, uint8_t *out) {
     prevX = bx;
   }
 
-  // 0..208 to 0..15.
-  const int full = SUB_ROWS * SUB_WEIGHT;
+}
+
+// Draws box row r into out: ROW_BYTES of 4-bit coverage, low nibble
+// first, filtered [1,2,1]/4 with the rows above and below. Rows come in
+// order from 0; row 0 starts the two kept rows afresh.
+static void drawRow(int r, uint8_t *out) {
+  if (r == 0) {
+    memset(rawA(), 0, X_COUNT);
+    covRow(0, rawB());
+  }
+  uint8_t next[X_COUNT];
+  covRow(r + 1, next);
+  // 0..4 x 208 to 0..15.
+  const int full = 4 * SUB_ROWS * SUB_WEIGHT;
+  uint8_t *rawA_ = rawA(), *rawB_ = rawB();
   for (int i = 0; i < ROW_BYTES; i++) {
-    const int a = (cov[2 * i] * 15 + full / 2) / full;
-    const int b = (cov[2 * i + 1] * 15 + full / 2) / full;
+    const int j = 2 * i;
+    const int a = ((rawA_[j] + 2 * rawB_[j] + next[j]) * 15 + full / 2) / full;
+    const int b = ((rawA_[j + 1] + 2 * rawB_[j + 1] + next[j + 1]) * 15 + full / 2) / full;
     out[i] = (uint8_t)(a | (b << 4));
   }
+  memcpy(rawA_, rawB_, X_COUNT);
+  memcpy(rawB_, next, X_COUNT);
 }
+
+static const int TEXT_W = TEXT_X1 - TEXT_X0;
+// The text scratch: three rows of coverage, then one 4:2:2 row of the box.
+static const int TEXT_ROW_BYTES = 2 * TEXT_W + 8;
+static const int TEXT_SCRATCH = 3 * TEXT_W + TEXT_ROW_BYTES;
+
+// Coverage 0..15 to colour, from the background to the line's ink.
+static void mapInk(TextMap *m, YCbCr ink) {
+  const YCbCr b = yccFromRgb(pal->backRgb);
+  for (int n = 0; n < 16; n++) {
+    m->ly[n] = (uint8_t)((b.Y * (15 - n) + ink.Y * n + 7) / 15);
+    m->lcb[n] = (uint8_t)((b.Cb * (15 - n) + ink.Cb * n + 7) / 15);
+    m->lcr[n] = (uint8_t)((b.Cr * (15 - n) + ink.Cr * n + 7) / 15);
+  }
+  m->ink = ink;
+  m->backRgb = pal->backRgb;
+}
+
+// Picture row y of a text line, unfiltered, as luma coverage 0..219 over
+// the text box.
+static void textRawRow(const TextOverlay *t, int y, uint8_t *raw) {
+  uint8_t *row = textRaw() + 3 * TEXT_W;
+  for (int i = 0; i < TEXT_ROW_BYTES / 2; i++) row[2 * i + 1] = 16;
+  const YCbCr white = {235, 128, 128};
+  // textDrawRow() writes samples TEXT_X0..TEXT_X1 only, so the row is
+  // addressed as if it began at sample 0.
+  textDrawRow(row - 2 * TEXT_X0, t, y, white);
+  for (int i = 0; i < TEXT_W; i++) raw[i] = (uint8_t)(row[2 * i + 1] - 16);
+}
+
+// Line t, top row y0, h0 rows, filtered into the next free part of the
+// map memory, with a row above and below for the filter to spread into.
+static void mapLine(TextMap *m, const TextOverlay *t, int y0, int h0, uint8_t **mem) {
+  uint8_t *mapMem = *mem;
+  m->h = 0;
+  uint8_t *a = textRaw(), *b = a + TEXT_W, *c = b + TEXT_W;
+  // Pass 1: the columns with ink, rounded out to pixel pairs.
+  int lo = TEXT_W, hi = -1;
+  for (int y = y0; y < y0 + h0; y++) {
+    textRawRow(t, y, a);
+    for (int i = 0; i < TEXT_W; i++) {
+      if (!a[i]) continue;
+      if (i < lo) lo = i;
+      if (i > hi) hi = i;
+    }
+  }
+  if (hi < lo) return;
+  lo &= ~1;
+  const int w = (hi - lo + 2) & ~1, h = h0 + 2;
+  if (mapMem + (w / 2) * h > mapEnd) return;
+  // Pass 2: rows y0 - 1 .. y0 + h0, each with its neighbours.
+  memset(a, 0, TEXT_W);
+  memset(b, 0, TEXT_W);
+  const int full = 4 * 219;
+  for (int r = 0; r < h; r++) {
+    const int below = y0 + r;   // the row under picture row y0 - 1 + r
+    if (below < y0 + h0) textRawRow(t, below, c);
+    else memset(c, 0, TEXT_W);
+    uint8_t *out = mapMem + r * (w / 2);
+    for (int i = 0; i < w; i += 2) {
+      const int j = lo + i;
+      const int p = ((a[j] + 2 * b[j] + c[j]) * 15 + full / 2) / full;
+      const int q = ((a[j + 1] + 2 * b[j + 1] + c[j + 1]) * 15 + full / 2) / full;
+      out[i / 2] = (uint8_t)(p | (q << 4));
+    }
+    uint8_t *s = a;
+    a = b;
+    b = c;
+    c = s;
+  }
+  m->cov = mapMem;
+  *mem = mapMem + (w / 2) * h;
+  m->x = TEXT_X0 + lo;
+  m->y = y0 - 1;
+  m->w = w;
+  m->h = h;
+}
+
+static void mapRow(uint8_t *base, const TextMap *m, int y) {
+  const int r = y - m->y;
+  if (r < 0 || r >= m->h) return;
+  const uint8_t *src = m->cov + r * (m->w / 2);
+  uint8_t *dst = base + 2 * m->x;
+  for (int i = 0; i < m->w / 2; i++) {
+    const uint8_t b = src[i];
+    if (!b) continue;
+    const int lo = b & 15, hi = b >> 4;
+    const int k = lo > hi ? lo : hi;   // one chroma sample for the pair
+    dst[4 * i] = m->lcb[k];
+    dst[4 * i + 1] = m->ly[lo];
+    dst[4 * i + 2] = m->lcr[k];
+    dst[4 * i + 3] = m->ly[hi];
+  }
+}
+
+static bool sameYcc(YCbCr a, YCbCr b) { return a.Y == b.Y && a.Cb == b.Cb && a.Cr == b.Cr; }
 
 // Starts drawing the other buffer for the second after `now`.
 static void startBack(int64_t now, ClockTime t) {
@@ -355,6 +493,12 @@ static bool tvClockBackground() {
 static void tvClockTick() {
   if (!pictures[0]) return;
   paletteUpdate();
+  if (maps) {
+    const YCbCr inks[2] = {textInkId(), textInkSub()};
+    for (int i = 0; i < 2; i++) {
+      if (!sameYcc(maps[i].ink, inks[i]) || maps[i].backRgb != pal->backRgb) mapInk(&maps[i], inks[i]);
+    }
+  }
   ClockTime t;
   const int64_t now = clockGet(&t);
   if (now == frontSecond) return;
@@ -388,6 +532,11 @@ static void tvClockReflow() {
   }
   textPrepare(idLine, cfgTextIdShown(), TEXT_X0, TEXT_X1, idY, idY + TEXT_H);
   textPrepare(subLine, cfgTextSubShown(), TEXT_X0, TEXT_X1, subY, subY + TEXT_H);
+  uint8_t *mem = (uint8_t *)(maps + 2);
+  mapLine(&maps[0], idLine, idY, TEXT_H, &mem);
+  mapLine(&maps[1], subLine, subY, TEXT_H, &mem);
+  mapInk(&maps[0], textInkId());
+  mapInk(&maps[1], textInkSub());
 }
 
 static void tvClockInit() {
@@ -403,12 +552,18 @@ static void tvClockInit() {
   }
   pictures[0] = scratch;
   pictures[1] = scratch + PICTURE_BYTES;
-  if (bytes >= 2 * PICTURE_BYTES + 2 * sizeof(TextOverlay) + sizeof(Palette)) {
+  // After the pictures: the two lines, the palette, the two kept rows,
+  // the text scratch and the two maps, whose coverage takes what is left.
+  const uint32_t fixed = 2 * sizeof(TextOverlay) + sizeof(Palette) + 2 * X_COUNT + TEXT_SCRATCH +
+                         4 + 2 * sizeof(TextMap);
+  if (bytes >= 2 * PICTURE_BYTES + fixed) {
     idLine = (TextOverlay *)(scratch + 2 * PICTURE_BYTES);
     subLine = idLine + 1;
     pal = (Palette *)(subLine + 1);
     pal->faceRgb = pal->backRgb = 0xFFFFFFFFu;   // forces the first update
     paletteUpdate();
+    maps = (TextMap *)(((uintptr_t)(textRaw() + TEXT_SCRATCH) + 3) & ~(uintptr_t)3);
+    mapEnd = scratch + bytes;
   } else {
     pictures[0] = pictures[1] = nullptr;
     idLine = subLine = nullptr;
@@ -447,11 +602,14 @@ static void tvClockRenderRow(uint8_t *base, int y) {
     dst[4 * i + 3] = pal->y[hi];
   }
   if (idLine) {
-    textDrawRow(base, idLine, y, textInkId());
-    textDrawRow(base, subLine, y, textInkSub());
+    const TextOverlay *lines[2] = {idLine, subLine};
+    for (int i = 0; i < 2; i++) {
+      if (maps[i].h) mapRow(base, &maps[i], y);
+      else textDrawRow(base, lines[i], y, i ? textInkSub() : textInkId());
+    }
   }
 }
 
 const Pattern PATTERN_TVCLOCK = {LANG_CARD_TV_CLOCK, tvClockInit, tvClockRenderRow, tvClockTick,
-                                 false, false, tvClockReflow, nullptr, false, false, nullptr, 0,
+                                 false, false, tvClockReflow, nullptr, false, false,
                                  tvClockBackground};

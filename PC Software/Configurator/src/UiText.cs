@@ -49,6 +49,14 @@ public static class UiText
     public const string PcmPreEmphasis = "Pre-emphasis 50/15 us";
     public const string PcmCtrlInPicture = "Control line in picture";
     public const string PcmText = "PCM text";
+    public const string LegacyText = "Third line";
+    public const string BoardFirmware = "board firmware";
+    public const string NoAnswerTitle = "No answer from the board";
+    public const string NoAnswerFmt =
+        "The board on {0} did not answer within {1} seconds.\n\n" +
+        "Check that this is the PAL-sign's port, that the USB cable is in, and that no other " +
+        "program (a serial monitor, the PCM decoder) has the port open.\n\n({2})";
+    public const string FirmwareOlder = "older than v1.11";
     public const string HamQuality = "Quality";
     public const string HamHq = "HQ: 48 kHz, 14 bit";
     public const string HamLq = "LQ: 32 kHz, 12 bit";
@@ -67,6 +75,8 @@ public static class UiText
         "Where the first and second line go: beside the clock, level with its top or its bottom.";
     public const string TipFaceColor = "The color of the clock: markers, hands and center dot.";
     public const string TipBackColor = "The color of the picture behind the clock.";
+    public const string TipLegacyText =
+        "The line under the second text line on BATC Legacy, one setting on the board; in the card's text font.";
     public const string TipPcmText =
         "Up to 10 characters sent inside the audio rows, protected like the audio: capitals, digits and punctuation.";
     public const string TipPcmCtrlInPicture =

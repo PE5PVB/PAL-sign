@@ -8,14 +8,6 @@
 
 #include <stdint.h>
 
-// A run of 4:2:2 pixel pairs (each pair is the four bytes Cb,Y,Cr,Y)
-// whose chroma gets inverted about 128 on alternate frames; see
-// Pattern::phaseBars. first/last are pair indices, 0..359.
-struct PhasePairRange {
-  uint16_t first;
-  uint16_t last;
-};
-
 struct Pattern {
   const char *name;
 
@@ -64,22 +56,15 @@ struct Pattern {
   // that counts lines from the vertical sync cannot have any of them.
   bool rawSignal;
 
-  // Optional (NULL/0 for a still card). A test card stored as two PAL
-  // phase frames (PM5644 and kin) alternates at 25 Hz: on every other
-  // frame the chroma of these pixel-pair ranges is inverted about 128, a
-  // 180 degree subcarrier phase flip of the delay-line reference bars.
-  // The luma and the rest of the chroma are identical in both frames, so
-  // the inversion runs unconditionally over these ranges: outside the
-  // bars the chroma is neutral 128 and 256-128 leaves it untouched.
-  // The flip is per frame only, never per line: the bars' own line-by-line
-  // sign change is what makes a delay-line decoder cancel them to grey.
-  const PhasePairRange *phaseBars;
-  int phaseBarCount;
-
   // Optional. Work done in the producer's spare time, only while the row
   // stock is well filled (as the ROM table copy): one bounded piece per
   // call, returns whether more is waiting.
   bool (*background)();
+
+  // true: the card draws both PAL phase frames itself, asking
+  // videoPhaseRow() per row; the frame hook reads the encoder's field
+  // counter for it.
+  bool phaseFrames;
 };
 
 // The pattern the video layer is sending out at the moment.
@@ -109,6 +94,8 @@ extern const Pattern PATTERN_PICDREAM;    // bars, a text box, a short multiburs
 extern const Pattern PATTERN_PCMAUDIO;    // Ham PCM: stereo audio as an NRZ bit stream (HQ, LQ, Voice)
 extern const Pattern PATTERN_SONYPCM;     // EIAJ/IEC 60841 PCM (Sony PCM-F1/501ES compatible), 14 or 16 bit
 extern const Pattern PATTERN_TVCLOCK;     // full-picture analogue clock (depips.nl TV Klok)
+extern const Pattern PATTERN_BATC;        // frequency staircase, the call large, bars and greys
+extern const Pattern PATTERN_BBCMICRO;    // a BBC Micro ATV test card with the call large (G7GTN style)
 
 // Which slot an uploadable card belongs to, or -1 for every other card;
 // the file name of the picture in it. Both live in custom.cpp.

@@ -61,12 +61,10 @@ public partial class CardsTab
         _loading = true;
         try
         {
-            // Transparent is not offered on an uploaded photograph: such
-            // a card reads its rows from flash, with no room for a band.
             _ticker.Items.Clear();
             _ticker.Items.Add(UiText.TickerOff);
             _ticker.Items.Add(UiText.TickerSolid);
-            if (!c.Photo) _ticker.Items.Add(UiText.TickerTransparent);
+            _ticker.Items.Add(UiText.TickerTransparent);
             _ticker.SelectedIndex = Math.Min(c.Ticker, _ticker.Items.Count - 1);
 
             _font.SelectedIndex = Math.Min(c.TickerFont, _font.Items.Count - 1);
@@ -80,9 +78,6 @@ public partial class CardsTab
             _textFace.SelectedIndex = Math.Clamp(c.TextFont, 0, _textFace.Items.Count - 1);
             // Mixed bars always letters its line in Inter (FixedFont), so
             // the choice is hidden there even though it draws text.
-            bool anyText = !c.FixedFont && (c.HasId != 1 || c.HasSub != 1 || c.HasBox != 1);
-            _textFaceLabel.Visible = anyText;
-            _textFace.Visible = anyText;
             _colTicker.BackColor = CardPreview.ColorOf(c.TickerColor);
             _colId.BackColor = CardPreview.ColorOf(c.IdColor);
             _colSub.BackColor = CardPreview.ColorOf(c.SubColor);
@@ -92,28 +87,9 @@ public partial class CardsTab
             _showId.Checked = c.ShowId;
             // The board says which cards have a place for each of these;
             // not known yet counts as shown.
-            _idRow.Visible = c.HasId != 1;
             _showSub.Checked = c.ShowSub;
-            _subRow.Visible = c.HasSub != 1;
             _moving.Checked = c.Moving;
-            _moving.Visible = c.HasLine != 1;
-            bool boxes = c.HasBox != 1;
-            _insertLabel.Visible = boxes;
-            _insHost.Visible = boxes;
-            _bars.Visible = c.Own == 1;
-            _ap2.Visible = c.Own == 2;
-            _contest.Visible = c.Own == 3;
-            _customPhoto.Visible = c.Own == 4;
-            _uploadPortrait.Visible = c.Own == 4;
-            bool sony = c.Own == 5, ham = c.Own == 6;   // no ticker, no aspect ratio on either
-            _pcmBitsRow.Visible = sony;
-            _pcmEmphasis.Visible = sony;
-            _pcmCtrlPic.Visible = sony;
-            _pcmTextRow.Visible = ham;
-            _hamQualityRow.Visible = ham;
-            _clockTextRow.Visible = c.Own == 7;
-            _clockColorRow.Visible = c.Own == 7;
-            ShowRasterRows(!(sony || ham));
+            ApplyVisibility(c);
             _bars.Checked = _cfg.G924Bars;
             _ap2.Checked = _cfg.TcgAp2;
             _customPhoto.Checked = c.CustomPhoto;
@@ -130,6 +106,8 @@ public partial class CardsTab
             _clockText.SelectedIndex = c.Option & 1;
             _pcmText.Text = _cfg.PcmText;
             _pcmText.Tag = _pcmText.Text;
+            _legacyText.Text = _cfg.LegacyText;
+            _legacyText.Tag = _legacyText.Text;
 
             _y.Maximum = ScreenH - BandOf(c);
             _y.Value = Math.Min(c.TickerY, _y.Maximum) & ~1;
@@ -154,6 +132,77 @@ public partial class CardsTab
         }
         finally { _loading = false; }
         _preview.Invalidate();
+    }
+
+    // Which option rows a card has; nothing else, so it can also run
+    // over every card just to measure (EqualPreviewSize()).
+    private void ApplyVisibility(CardInfo c)
+    {
+        // Mixed bars always letters its line in Inter (FixedFont), so
+        // the choice is hidden there even though it draws text.
+        bool anyText = !c.FixedFont && (c.HasId != 1 || c.HasSub != 1 || c.HasBox != 1);
+        _textFaceLabel.Visible = anyText;
+        _textFace.Visible = anyText;
+        // The board says which cards have a place for each of these;
+        // not known yet counts as shown.
+        _idRow.Visible = c.HasId != 1;
+        _subRow.Visible = c.HasSub != 1;
+        _moving.Visible = c.HasLine != 1;
+        bool boxes = c.HasBox != 1;
+        _insertLabel.Visible = boxes;
+        _insHost.Visible = boxes;
+        _bars.Visible = c.Own == 1;
+        _ap2.Visible = c.Own == 2;
+        _contest.Visible = c.Own == 3;
+        _customPhoto.Visible = c.Own == 4;
+        _uploadPortrait.Visible = c.Own == 4;
+        bool sony = c.Own == 5, ham = c.Own == 6;   // no ticker, no aspect ratio on either
+        _pcmBitsRow.Visible = sony;
+        _pcmEmphasis.Visible = sony;
+        _pcmCtrlPic.Visible = sony;
+        _pcmTextRow.Visible = ham;
+        _legacyTextRow.Visible = c.Own == 8;
+        _hamQualityRow.Visible = ham;
+        _clockTextRow.Visible = c.Own == 7;
+        _clockColorRow.Visible = c.Own == 7;
+        ShowRasterRows(!(sony || ham));
+    }
+
+    /// <summary>For the --previewsizes check only: the number of cards,
+    /// and per card the size the preview picture is drawn at.</summary>
+    internal int CardCount => _list.Items.Count;
+
+    internal string ProbePreview(int i)
+    {
+        _list.SelectedIndex = i;
+        Application.DoEvents();
+        var c = Current;
+        var box = _preview.ClientRectangle;
+        box.Inflate(-4, -4);
+        float fit = Math.Min(box.Width / 720f, (box.Height - 18) / 576f);
+        return $"{c?.Number,2} {c?.Name,-22} panel {_preview.ClientSize.Width}x{_preview.ClientSize.Height}" +
+               $"  picture {(int)(720 * fit)}x{(int)(576 * fit)}";
+    }
+
+    // The options row as high as the card with the most options needs, so
+    // the preview below it comes out the same size for every card instead
+    // of shrinking on a card with extra rows.
+    private void EqualPreviewSize()
+    {
+        if (_cfg == null || _cfg.Cards.Count == 0) return;
+        _root.SuspendLayout();
+        _root.RowStyles[0] = new RowStyle(SizeType.AutoSize);
+        int most = 0;
+        foreach (var c in _cfg.Cards)
+        {
+            ApplyVisibility(c);
+            _options.PerformLayout();
+            most = Math.Max(most, _options.GetPreferredSize(new Size(_options.Width, 0)).Height);
+        }
+        var cur = Current;
+        if (cur != null) ApplyVisibility(cur);
+        _root.RowStyles[0] = new RowStyle(SizeType.Absolute, most + _options.Margin.Vertical);
+        _root.ResumeLayout(true);
     }
 
     // Read from the aspect NAME the board sends, rather than a local
@@ -197,6 +246,8 @@ public partial class CardsTab
         int drawn = (int)(720 * fit);
         box.Y = box.Bottom - need;
         box.Height = need;
+        box.X += (box.Width - drawn) / 2;   // centred across the panel
+        box.Width = drawn;
         using (var title = new SolidBrush(Color.FromArgb(60, 60, 60)))
         {
             SizeF sz = g.MeasureString(UiText.PreviewTitle, Font);

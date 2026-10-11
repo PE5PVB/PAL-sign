@@ -142,6 +142,9 @@ const char *cfgInsertLeft();
 static const int PCM_TEXT_MAX = 11;
 const char *cfgPcmText();
 void cfgSetPcmText(const char *s);
+// BATC Legacy's third line, under the second text line.
+const char *cfgLegacyText();
+void cfgSetLegacyText(const char *s);
 const char *cfgInsertRight();
 void cfgSetInsertLeft(const char *s);
 void cfgSetInsertRight(const char *s);

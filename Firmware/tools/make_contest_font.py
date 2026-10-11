@@ -97,19 +97,46 @@ def ring_of(data, w, h):
     cov = hard.astype(np.uint8) * 255
     cov[soft] = 128
     cov[big] = 0
-    # rleDarkenRow() halves the luma without a multiply because every
-    # edge byte in a ring stream is exactly 128 (255 always becomes a
-    # solid run in the encoder). Anything else here must fail the build.
-    assert set(np.unique(cov)) <= {0, 128, 255}
     return cov.tobytes()
 
 
-def build_into(f, cap_target, prefix, struct, rings):
+def vfilter(a):
+    """[1,2,1]/4 down the rows, zero beyond the first and last: the same
+    kernel the PC tool's photo conversion uses against interlace twitter
+    (AntiTwitter in ImageConvert.cs). An edge that is sharp from one line
+    to the next lands in one field only and flickers at 25 Hz."""
+    p = np.pad(a.astype(np.float64), ((1, 1), (0, 0)))
+    return (p[:-2] + 2 * p[1:-1] + p[2:]) / 4
+
+
+def smooth_glyph(data, w, h):
+    """A glyph for the ticker with its vertical edges softened: one row
+    added above and below, ink and ring both through vfilter(). Returns
+    (ink bytes, ring bytes, new height); the ring is (w + 2 RING) x
+    (new height + 2 RING) and, unlike ring_of(), covers the ink as well
+    (255 under it), since the ink is laid over black anyway and a ring
+    row that runs on through the letter is one token instead of two.
+    Ring values are any coverage then, which rleDarkenRow() blends by."""
+    ink = np.zeros((h + 2, w), np.float64)
+    ink[1:-1] = np.frombuffer(data, np.uint8).reshape(h, w)
+    big = np.zeros((h + 2 + 2 * RING, w + 2 * RING), bool)
+    big[RING:RING + h + 2, RING:RING + w] = ink > 127
+    hard = dilate(big, RING_HARD)
+    soft = dilate(big, RING) & ~hard
+    dark = hard.astype(np.float64) * 255
+    dark[soft] = 128
+    dark[big] = 255
+    ink_s = np.clip(np.round(vfilter(ink)), 0, 255).astype(np.uint8)
+    ring_s = np.clip(np.round(vfilter(dark)), 0, 255).astype(np.uint8)
+    return ink_s.tobytes(), ring_s.tobytes(), h + 2
+
+
+def build_into(f, cap_target, prefix, struct, rings, smooth=False):
     """The CAP/TOP/BOTTOM constants, the glyph tokens and the struct
     table for one face, written into an already open file. Split out of
     build() below so a caller merging several faces into one header
     (see tools/make_ticker_font.py) can write the shared preamble once
-    and call this once per face."""
+    and call this once per face. smooth: see smooth_glyph()."""
     size = cap_target
     while True:
         y0, y1 = caps_band(size + 1)
@@ -122,6 +149,7 @@ def build_into(f, cap_target, prefix, struct, rings):
           f"(target {cap_target})")
 
     glyphs = []
+    ringdata = {}
     for ch in CHARSET:
         adv = max(1, round(font.getlength(ch)))
         if ch == " ":
@@ -131,7 +159,11 @@ def build_into(f, cap_target, prefix, struct, rings):
         crop = img.crop(b)
         lsb = b[0] - ORIGIN[0]
         yoff = b[1] - cap_top
-        glyphs.append((ch, crop.width, crop.height, yoff, lsb, adv, crop.tobytes()))
+        data, h = crop.tobytes(), crop.height
+        if smooth:
+            data, ringdata[ch], h = smooth_glyph(data, crop.width, h)
+            yoff -= 1
+        glyphs.append((ch, crop.width, h, yoff, lsb, adv, data))
 
     f.write(f"static const int {prefix}_CAP = {cap_bot - cap_top};\n")
     top = min(y for _, _, h, y, _, _, _ in glyphs if h)
@@ -144,8 +176,8 @@ def build_into(f, cap_target, prefix, struct, rings):
             continue
         total += emit_rle(f, f"{prefix}_{i}", data, w, h)
         if rings:
-            total += emit_rle(f, f"{prefix}_{i}_RING",
-                              ring_of(data, w, h), w + 2 * RING, h + 2 * RING)
+            ring = ringdata[ch] if smooth else ring_of(data, w, h)
+            total += emit_rle(f, f"{prefix}_{i}_RING", ring, w + 2 * RING, h + 2 * RING)
     # The struct itself lives in src/runglyph.h, so a file that only
     # handles pointers can see the fields without pulling the tables
     # in; this header only fills a table of them.
@@ -182,6 +214,12 @@ def main():
     # testcards/contest_face.h: same face, same size, one table.
     build(90, "../src/testcards/contest_font.h", "CONTEST_FONT", "ContestGlyph",
           rings=False, whom="the contest page and the Mixed bars card",
+          glyph_h="../runglyph.h")
+    # The BATC card: the same face larger, 110 row capitals, which
+    # the card scales DOWN once at layout to fill its box, so every
+    # length of call gets the largest smooth size that fits.
+    build(110, "../src/testcards/batc_font.h", "BATC_FONT", "ContestGlyph",
+          rings=False, whom="the BATC card",
           glyph_h="../runglyph.h")
     # The ticker face (TICKER_FONT) is no longer built here: it shares
     # src/ticker_font.h with the Doto face, see make_ticker_font.py.

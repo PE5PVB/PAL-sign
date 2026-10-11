@@ -26,8 +26,8 @@ struct TickerGlyph {
   uint8_t adv;
   const uint16_t *off;
   const uint8_t *rle;
-  // The ring for the transparent ticker: 3 wider on every side, 255
-  // hard black, 128 half blended.
+  // The ring for the transparent ticker: 3 wider on every side, the
+  // coverage of black over the picture, 255 under the ink itself.
   const uint16_t *roff;
   const uint8_t *rrle;
 };

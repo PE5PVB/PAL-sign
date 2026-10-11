@@ -28,7 +28,7 @@ struct VideoStats {
 };
 
 // Sets up the PIO and the two chained DMA channels on core1, and builds
-// the four fixed blank rows in RAM.
+// the two blank rows in RAM.
 void videoStartPio();
 
 // Requests an SFL timing reset: aligns the encoder's field 1 with ours.
@@ -56,12 +56,43 @@ void videoGetStats(VideoStats *s);
 // Called once per frame from the producer loop, in vertical blanking.
 void videoFrameHook();
 
-// Selects the PAL phase frame for a card that stores two
-// (Pattern::phaseBars); set once per frame from the encoder's field
-// counter, so it is constant across a frame's two fields.
+// Selects the PAL phase frame field 1 of the coming frame starts with,
+// for a Pattern::phaseFrames card; set once per frame from the encoder's
+// field counter.
 void videoSetPhaseFrame(bool on);
+
+// The phase frame of the row being built, for a Pattern::phaseFrames
+// card: the frame's own in field 1, the other one in field 2. The
+// PM5644 plays its EPROM fields in the order field 2, field 1, so one
+// generator frame is field 2 of a picture plus field 1 of the next.
+bool videoPhaseRow();
+
+// Sets it for a row rendered outside videoBuildLine() (the card dump
+// asks for phase frame 0); the next video row sets it again.
+void videoSetPhaseRow(bool on);
 
 // Kicks the hardware watchdog, only when core1 has made progress since
 // the last kick. Safe to call from anywhere on core0.
 void videoFeedWatchdog();
+
+// A photograph's rows copied into the ring ahead by core1; see the
+// prefill section in video.cpp. The source is the picture's row 0 in
+// XIP, or nullptr for a card that draws its own rows; a photograph's
+// init() sets it, and it is cleared before every init().
+void videoSetPrefill(const uint8_t *photo);
+
+// The letterbox the prefill applies, as aspect.cpp applies it to
+// renderRow(): rows outside [bar, bar + active) are black, the rest
+// squeezed by skipping rows.
+void videoPrefillAspect(int bar, int active);
+
+// True while the row being built already holds its picture: the card's
+// renderRow() may then return at once.
+bool videoRowPrefilled();
+
+// For the timing report: rows core1 copied in, rows core0 copied itself
+// (core1 was not on them), copies a reload cut short (taken up again),
+// and how often and how long core0 waited for a row core1 was on.
+void videoTakePrefillStats(uint32_t *byCore1, uint32_t *byCore0, uint32_t *cut, uint32_t *waits,
+                           uint32_t *waitUs);
 #endif  // VIDEO_H

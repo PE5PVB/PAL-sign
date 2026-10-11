@@ -16,6 +16,7 @@
 #include "rompattern.h"
 #include "its.h"
 #include "teletext.h"
+#include "hardware/regs/addressmap.h"
 
 static const uint8_t DATA_PIN_BASE = PIN_DATA_BASE;
 static const uint8_t CLKOUT_PIN = PIN_CLKOUT;
@@ -79,14 +80,22 @@ static volatile uint32_t starveCount = 0;
 static volatile uint32_t txStallCount = 0;
 static volatile uint32_t chainRestartCount = 0;
 volatile uint32_t videoStallCount = 0;
+volatile uint32_t videoResyncCount = 0;   // the producer hooked back on after falling behind
+volatile int32_t videoProducerMaxAhead = RING_SIZE - 3;
 static volatile uint32_t flashLineCount = 0;
 static volatile uint32_t loadStallCount = 0;
+// Core1's time spent waiting for the DMA channel, summed, for the
+// report's line on how busy each core is.
+volatile uint64_t videoCore1WaitUs = 0;
 
-// Four fixed blank rows in RAM, one per F/V combination (H is fixed at
-// 0/1 in SAV/EAV; see eavSavByte()). With no fresh row in the ring
-// buffer, the streamer sends one of these instead, so CLKIN and the DMA
-// chain never stall. 4 x 1728 = 6912 bytes RAM.
-static uint8_t blankLine[4][SAMPLES_PER_LINE] __attribute__((aligned(4)));
+// Two blank rows in RAM, one per DMA channel, their F and V bits in SAV
+// and EAV written at load time (H is fixed at 0/1; see eavSavByte()).
+// With no fresh row in the ring buffer, the streamer sends one of these
+// instead, so CLKIN and the DMA chain never stall. The channel being
+// reloaded has finished its last row, so its blank row is free to write
+// while the other channel's may still be going out. 2 x 1728 = 3456
+// bytes RAM.
+static uint8_t blankLine[2][SAMPLES_PER_LINE] __attribute__((aligned(4)));
 
 static PIO pio = pio0;
 static uint pioSm = 0;
@@ -138,12 +147,229 @@ static inline void __not_in_flash_func(blankEdges)(uint8_t *active) {
   for (int i = 356; i < 360; i++) w[i] = 0x10801080u;          // samples 712..719
 }
 
-// Which of the two PAL phase frames is going out now, for a card that
+// ---------------------------------------------------------------------
+// A photograph's rows, copied into the ring ahead of core0 by core1.
+//
+// A photograph row is a 1440 byte copy out of XIP, 44 us of the 64 a row
+// has, so core0 never gets more than a few rows ahead of the streamer,
+// and a transparent band laid on by core1 has no room left to work in.
+// Core1 waits on the DMA for most of every row; here it copies the
+// picture rows into the ring slots ahead of the row core0 is building,
+// and core0 finds its row already there.
+//
+// The flash is the one bottleneck, one row per 44 us whoever reads it,
+// so the two cores never copy against each other: core1 copies row
+// after row, core0 copies a row itself only when core1 is not on it,
+// and when core1 is, core0 waits and core1 finishes that row first
+// thing next turn. On a turn the band's overlay takes, core1 begins no
+// new row, so core0 copies the band's rows itself, as before.
+//
+// Claiming a slot is Dekker's handshake over two flags: core1 writes
+// prefillBusy = q, barrier, then reads videoProducedCount and backs off
+// when core0 is at q or past it; core0 has written videoProducedCount
+// = q before starting the row, barrier, then reads prefillBusy. With a
+// full barrier on both sides at least one of them sees the other's
+// write. Core1 keeps the claim across turns until the row is done.
+//
+// A slot counts as filled when its tag holds the row counter it was
+// filled for and the generation of the source at the time (which
+// picture, which letterbox): a slot left over from before any change
+// never passes, and core0 blanks the tag of every slot it fills itself.
+static const int32_t PREFILL_LEAD = 1;
+static const uint32_t PREFILL_NONE = 0xFFFFFFFFu;
+// In pieces, with a look at the DMA in between: 40 words are some 5 us
+// with nothing else on the flash, so a reload waits at most that long.
+// Four words a go: a word at a time is a bus transaction per word and
+// came to 69 us a row, slower than the line; the four-word block below
+// compiles to ldmia/stmia.
+static const uint32_t PREFILL_CHUNK_WORDS = 40;
+static const uint32_t PREFILL_CHUNKS = ACTIVE_SAMPLES / 4 / PREFILL_CHUNK_WORDS;
+static_assert(PREFILL_CHUNK_WORDS * PREFILL_CHUNKS * 4 == ACTIVE_SAMPLES, "chunks must cover the row");
+struct PrefillBlock {
+  uint32_t w[4];
+};
+static_assert(PREFILL_CHUNK_WORDS % 4 == 0, "a chunk is whole blocks");
+// Read the picture through the no-allocate window, so core1's copies do
+// not push core0's code out of the XIP cache.
+static const bool PREFILL_NOALLOC = false;
+
+static const uint8_t *volatile prefillSrc = nullptr;   // the picture's row 0, or off
+static volatile int prefillBar = 0, prefillActive = SCREEN_H;
+static volatile uint32_t prefillGen = 0;
+static volatile uint32_t prefillTag[RING_SIZE];
+static volatile uint8_t prefillTagGen[RING_SIZE];
+static volatile uint32_t prefillBusy = PREFILL_NONE;   // the slot core1 is copying into
+static uint32_t prefillCursor = 0;                     // core1's: the next slot to take
+static bool rowPrefilled = false;
+static volatile uint32_t prefillByCore1 = 0, prefillByCore0 = 0, prefillCut = 0;
+static uint32_t prefillWaits = 0, prefillWaitUs = 0;   // core0's
+
+// Only a real change moves the generation on: both are called again
+// with the same values as a matter of course (every card change sets
+// the aspect, a text change runs init() again), and every step of the
+// generation throws away the rows copied in so far.
+void videoSetPrefill(const uint8_t *photo) {
+  if (photo == prefillSrc) return;
+  // One slot of lead for core1 (videoloop.h): with the two at the same
+  // bound, core0, which polls, took the slot that came free before core1,
+  // which looks once a row, and copied nearly half the rows itself.
+  videoProducerMaxAhead = photo ? RING_SIZE - 4 : RING_SIZE - 3;
+  prefillSrc = photo;
+  __sync_synchronize();
+  prefillGen = prefillGen + 1;   // after the source: core1 reads the generation first
+}
+
+void videoPrefillAspect(int bar, int active) {
+  if (bar == prefillBar && active == prefillActive) return;
+  prefillBar = bar;
+  prefillActive = active;
+  __sync_synchronize();
+  prefillGen = prefillGen + 1;
+}
+
+bool videoRowPrefilled() { return rowPrefilled; }
+
+void videoTakePrefillStats(uint32_t *byCore1, uint32_t *byCore0, uint32_t *cut, uint32_t *waits,
+                           uint32_t *waitUs) {
+  *byCore1 = prefillByCore1;
+  *byCore0 = prefillByCore0;
+  *cut = prefillCut;
+  *waits = prefillWaits;
+  *waitUs = prefillWaitUs;
+  prefillByCore1 = prefillByCore0 = prefillCut = 0;
+  prefillWaits = prefillWaitUs = 0;
+}
+
+// The picture row ring slot q carries, -1 for a blanking line: the same
+// mapping as videoBuildLine() (slot k is line (k % 625) + 1).
+static int __not_in_flash_func(rowOfSlot)(uint32_t q) {
+  const uint32_t line = q % LINES_PER_FRAME + 1;
+  const bool field2 = line >= 313;
+  const uint32_t fl = field2 ? line - 312 : line;
+  if (!field2 && fl >= 23 && fl <= 310) return (int)(fl - 23) * 2;
+  if (field2 && fl >= 24 && fl <= 311) return (int)(fl - 24) * 2 + 1;
+  return -1;
+}
+
+// Core0, at the start of row q: waits for the copy core1 is on into
+// this slot, then says whether the slot holds the row.
+static bool __not_in_flash_func(prefillClaim)(uint32_t q) {
+  __sync_synchronize();   // videoProducedCount = q is out before prefillBusy is read
+  if (prefillBusy == q) {
+    // Bounded, a safety net only: core1 finishes this row first thing
+    // next turn, so this is a turn and a copy at the most.
+    const uint32_t t0 = time_us_32();
+    while (prefillBusy == q && time_us_32() - t0 < 2000) tight_loop_contents();
+    prefillWaits = prefillWaits + 1;
+    prefillWaitUs = prefillWaitUs + (time_us_32() - t0);
+    __sync_synchronize();
+  }
+  const uint32_t s = q % RING_SIZE;
+  if (prefillSrc && prefillTag[s] == q && prefillTagGen[s] == (uint8_t)prefillGen) {
+    prefillByCore1 = prefillByCore1 + 1;
+    return true;
+  }
+  prefillTag[s] = PREFILL_NONE;
+  if (prefillSrc) prefillByCore0 = prefillByCore0 + 1;
+  return false;
+}
+
+// Core1's row in progress: where it is in the copy, from which source
+// generation, and where the next chunk goes.
+static uint32_t partChunk = 0, partGen = 0;
+static const PrefillBlock *partSrc = nullptr;
+static PrefillBlock *partDst = nullptr;
+
+// Core1: goes on with the row it holds, chunk by chunk, until it is
+// done, the channel to reload next has finished (then it waits for the
+// next turn), core0 has gone past it, or the source changed under it. A
+// hand-written word loop, since memcpy lives in flash.
+static void __not_in_flash_func(prefillContinue)(int nextCh) {
+  const uint32_t q = prefillBusy;
+  if (q == PREFILL_NONE) return;
+  if ((int32_t)(videoProducedCount - q) > 0 || partGen != prefillGen) {
+    __sync_synchronize();
+    prefillBusy = PREFILL_NONE;   // let go without a tag: core0 copies it itself
+    return;
+  }
+  for (; partChunk < PREFILL_CHUNKS; partChunk++) {
+    if (!dma_channel_is_busy(nextCh)) {
+      prefillCut = prefillCut + 1;
+      return;
+    }
+    for (uint32_t i = 0; i < PREFILL_CHUNK_WORDS / 4; i++) *partDst++ = *partSrc++;
+  }
+  __sync_synchronize();   // the row is in before the tag says so
+  prefillTag[q % RING_SIZE] = q;
+  prefillTagGen[q % RING_SIZE] = (uint8_t)partGen;
+  __sync_synchronize();
+  prefillBusy = PREFILL_NONE;
+  prefillCursor = q + 1;
+}
+
+// Core1, first thing after a reload: the row core0 is waiting for, if
+// it is waiting for one.
+void __not_in_flash_func(videoPrefillUrgent)(int nextCh) {
+  const uint32_t q = prefillBusy;
+  if (q != PREFILL_NONE && videoProducedCount == q) prefillContinue(nextCh);
+}
+
+// Core1, with what is left of a turn: the row in progress, then new
+// rows when mayStart, until the channel to reload next has finished its
+// row.
+void __not_in_flash_func(videoPrefillStep)(int nextCh, bool mayStart) {
+  for (;;) {
+    prefillContinue(nextCh);
+    if (prefillBusy != PREFILL_NONE) return;   // cut by the reload: next turn
+    if (!mayStart || !dma_channel_is_busy(nextCh)) return;
+    // Generation first, then what it covers; videoSetPrefill() writes
+    // them the other way round, so a row tagged with a generation was
+    // copied from that generation's source.
+    const uint32_t gen = prefillGen;
+    __sync_synchronize();
+    const uint8_t *src = prefillSrc;
+    if (!src) return;
+    const int bar = prefillBar, act = prefillActive;
+    const uint32_t produced = videoProducedCount;
+    if ((int32_t)(prefillCursor - produced) < PREFILL_LEAD) prefillCursor = produced + PREFILL_LEAD;
+    // The same distance core0 keeps from the streamer: two rows are
+    // always under way. And no further than a ring ahead of core0 either,
+    // or, with core0 behind the streamer, the slots would be filled over
+    // again before core0 got to them.
+    if ((int32_t)(prefillCursor - videoConsumedCount) >= (int32_t)(RING_SIZE - 3) ||
+        (int32_t)(prefillCursor - produced) >= (int32_t)(RING_SIZE - 3))
+      return;
+    const uint32_t q = prefillCursor;
+    int y = rowOfSlot(q);
+    if (y >= 0 && act < SCREEN_H) y = (y < bar || y >= bar + act) ? -1 : (y - bar) * SCREEN_H / act;
+    if (y < 0) {
+      prefillCursor = q + 1;   // blanking, or a letterbox bar: nothing to copy
+      continue;
+    }
+    prefillBusy = q;
+    __sync_synchronize();
+    if ((int32_t)(videoProducedCount + PREFILL_LEAD - q) > 0) {
+      prefillBusy = PREFILL_NONE;   // core0 got there meanwhile
+      continue;
+    }
+    if (PREFILL_NOALLOC) src = (const uint8_t *)((uintptr_t)src - XIP_BASE + XIP_NOCACHE_NOALLOC_BASE);
+    partChunk = 0;
+    partGen = gen;
+    partDst = (PrefillBlock *)(videoRing[q % RING_SIZE] + 4);   // past the SAV
+    partSrc = (const PrefillBlock *)(src + (uint32_t)y * ACTIVE_SAMPLES);
+  }
+}
+
+// Which of the two PAL phase frames a frame starts with, for a card that
 // stores both (PM5644). Set once per frame from the encoder's field
-// counter by videoSetPhaseFrame() in the frame hook, so it is constant
-// across a frame's two fields.
+// counter by videoSetPhaseFrame() in the frame hook; videoPhaseRow()
+// gives field 2 the other one.
 static bool videoPhaseFrame = false;
 void videoSetPhaseFrame(bool on) { videoPhaseFrame = on; }
+
+static bool videoRowPhase = false;
+bool videoPhaseRow() { return videoRowPhase; }
+void videoSetPhaseRow(bool on) { videoRowPhase = on; }
 
 // Fills buf with one complete BT.656 line (SAV, active picture, EAV,
 // blanking). line runs from 1 through 625.
@@ -180,27 +406,12 @@ void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
 
   if (active) {
     int y = activeY * 2 + (field2 ? 1 : 0);  // interlaced row within 0..575
+    videoRowPhase = videoPhaseFrame != field2;
+    rowPrefilled = prefillClaim(videoProducedCount);
     patternRenderRow(p, y);
+    rowPrefilled = false;
     if (!activePattern->keepEdges) blankEdges(p);
     displaySampleRow(p, y, videoDisplaySample);   // must run even with no time to spare
-    // Second PAL phase frame: invert the reference bars' chroma about 128,
-    // the whole frame alike. The bars change sign every line in the pixel
-    // data; a delay-line decoder cancels that to grey, so the inversion
-    // must not depend on the line or the bars turn into plain colour.
-    if (videoPhaseFrame && activePattern->phaseBars) {
-      // Hoisted into locals: the byte stores to p could alias the Pattern
-      // as far as the compiler knows, which forced a reload of first/last
-      // and the table pointer on every pair.
-      const PhasePairRange *bars = activePattern->phaseBars;
-      const int n = activePattern->phaseBarCount;
-      for (int b = 0; b < n; b++) {
-        const uint32_t first = bars[b].first, last = bars[b].last;
-        for (uint32_t k = first; k <= last; k++) {
-          p[4 * k + 0] = (uint8_t)(256 - p[4 * k + 0]);   // Cb
-          p[4 * k + 2] = (uint8_t)(256 - p[4 * k + 2]);   // Cr
-        }
-      }
-    }
     p += ACTIVE_SAMPLES;
   } else if (activePattern->vbiLine && activePattern->vbiLine(p, line)) {
     p += ACTIVE_SAMPLES;   // the card's own blanking-line data comes first
@@ -220,15 +431,16 @@ void __not_in_flash_func(videoBuildLine)(uint8_t *buf, uint32_t line) {
   for (uint32_t i = 0; i < BLANK_FILL_SAMPLES / 4; i++) *pw++ = 0x10801080u;
 }
 
-// Which of the four blank rows belongs to this line number; same field
-// layout as videoBuildLine(), V = !active. IN RAM: called while core0
-// writes flash.
-static int __not_in_flash_func(lineKind)(uint32_t line) {
+// Writes this line number's F and V into a blank row's SAV and EAV; same
+// field layout as videoBuildLine(), V = !active. IN RAM: called while
+// core0 writes flash.
+static void __not_in_flash_func(blankLineFlags)(uint8_t *row, uint32_t line) {
   bool field2 = (line >= 313);
   uint32_t fieldLine = field2 ? (line - 312) : line;
   bool V = field2 ? ((fieldLine <= 23) || (fieldLine >= 312))
                   : ((fieldLine <= 22) || (fieldLine >= 311));
-  return (field2 ? 2 : 0) | (V ? 1 : 0);
+  row[3] = eavSavByte(field2, V, 0);
+  row[4 + ACTIVE_SAMPLES + 3] = eavSavByte(field2, V, 1);
 }
 
 static void buildBlank(uint8_t *buf, bool F, bool V) {
@@ -243,7 +455,7 @@ static void buildBlank(uint8_t *buf, bool F, bool V) {
 }
 
 static void buildBlankLines() {
-  for (int i = 0; i < 4; i++) buildBlank(blankLine[i], (i & 2) != 0, (i & 1) != 0);
+  for (int i = 0; i < 2; i++) buildBlank(blankLine[i], false, false);
 }
 
 void videoRequestSflPulse() {
@@ -382,7 +594,7 @@ void videoStartPio() {
 // in the pico-sdk so it comes along too.
 //
 // Check after every change, with arm-none-eabi-objdump -d on the elf:
-// loop1, videoLoadLine, lineKind, videoKickChain, videoSflStep and
+// loop1, videoLoadLine, blankLineFlags, videoKickChain, videoSflStep and
 // videoCountTxStall must all sit at an address in 0x2000_0000.., with no
 // bl branch out of them going to 0x1000_0000..
 //
@@ -439,7 +651,9 @@ void __not_in_flash_func(videoLoadLine)(int ch, bool blank) {
   // where this never returns at all.
   const uint32_t t0 = time_us_32();
   while (dma_channel_is_busy(ch)) tight_loop_contents();
-  if (time_us_32() - t0 > LOAD_STALL_US) loadStallCount++;
+  const uint32_t waited = time_us_32() - t0;
+  videoCore1WaitUs += waited;
+  if (waited > LOAD_STALL_US) loadStallCount++;
 
   const uint8_t *bron;
   // The wrap guard's second half; see VIDEO_RENORM_STEP. First thing,
@@ -447,6 +661,7 @@ void __not_in_flash_func(videoLoadLine)(int ch, bool blank) {
   // and this call goes out blank.
   if (videoRenormRequest) {
     videoConsumedCount -= VIDEO_RENORM_STEP;
+    prefillCursor -= VIDEO_RENORM_STEP;
     videoRenormRequest = false;
   }
 
@@ -461,7 +676,9 @@ void __not_in_flash_func(videoLoadLine)(int ch, bool blank) {
     } else if (producerRunning) {
       starveCount++;
     }
-    bron = blankLine[lineKind((videoConsumedCount % LINES_PER_FRAME) + 1)];
+    uint8_t *b = blankLine[ch == videoDmaChanA ? 0 : 1];
+    blankLineFlags(b, (videoConsumedCount % LINES_PER_FRAME) + 1);
+    bron = b;
   }
   dma_channel_set_read_addr(ch, bron, false);
   dma_channel_set_trans_count(ch, WORDS_PER_LINE, false);
@@ -520,6 +737,7 @@ void __not_in_flash_func(videoStreamBegin)() {
 }
 
 void videoProducerBegin() {
+  videoSetPrefill(nullptr);   // a photograph's init() sets it
   activePattern->init();
   hookProducerOn();
 }

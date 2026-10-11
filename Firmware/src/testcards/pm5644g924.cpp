@@ -8,20 +8,31 @@
 // colour on a good decoder). No insert boxes in the ROM data itself,
 // so the clock is drawn on top here, not baked in.
 //
-// Like G913 this generation samples at just over 20 MHz rather than
-// 13.5 MHz, so samples do not pass through one for one;
-// tools/convert_rom_pattern.py averages down to 707 samples and 64
-// luma levels.
+// Like G913 this generation samples at 20 MHz rather than 13.5 MHz, so
+// samples do not pass through one for one: tools/pm5644_eprom.py plays
+// the EPROMs and averages the active window down to 707 samples and 64
+// luma levels, the chroma left where the EPROM has it.
+//
+// Two PAL phase frames, as on the G00 (see pm5644g00.cpp): the second
+// differs only in the chroma of the bars, stored as patches
+// (pm5644g924_phase.h) and laid on per row by videoPhaseRow(). Line 23
+// (row 0) carries the EPROM's own data burst in its first half, which
+// only goes out with the aspect setting off: otherwise the encoder puts
+// its WSS there.
 #include "../config.h"
 #include "../gfx.h"
 #include "../language.h"
 #include "../pattern.h"
 #include "pm5644g924_data.h"
+#include "pm5644g924_phase.h"
 #include "../rompattern.h"
 #include "../inserts.h"
 #include "../movingline.h"
 #include "../settings.h"
 #include "../textoverlay.h"
+#include "../video.h"
+
+#include <string.h>
 
 static_assert(PM5644G924_RUN_COUNT <= ROM_MAX_RUNS, "raise ROM_MAX_RUNS in rompattern.h");
 static_assert(PM5644G924_PAL_SIZE <= ROM_MAX_PAL, "raise ROM_MAX_PAL in rompattern.h");
@@ -44,6 +55,11 @@ static TextOverlay idLine, subLine, insLeft, insRight;
 static const int INS_L_X0 = 203, INS_L_X1 = 314;
 static const int INS_R_X0 = 405, INS_R_X1 = 516;
 static const int INS_Y0 = 270, INS_Y1 = 312;
+
+// The phase patches in RAM, like the run tables: the stream, and the
+// row index of the variant in use.
+static uint8_t patchData[PM5644G924_PATCH_BYTES];
+static uint8_t patchRow[ROM_ROWS];
 
 // pat0 date+time, pat1 time only, pat2 neither, pat3 = pat0 without
 // chroma bars (the only bars-off variant, so bars off implies date and
@@ -69,6 +85,9 @@ static void pm5644g924Tick() {
 }
 
 static void pm5644g924Init() {
+  memcpy(patchData, pm5644g924_patchData, sizeof(patchData));
+  memcpy(patchRow, pm5644g924_patchRow[variantFor()], sizeof(patchRow));
+
   RomTables t;
   t.pal = pm5644g924_pal;
   t.idx = pm5644g924_idx;
@@ -90,6 +109,8 @@ static void pm5644g924Init() {
 
 static void pm5644g924RenderRow(uint8_t *base, int y) {
   romRenderRow(base, y);
+  if (videoPhaseRow() && patchRow[y] < PM5644G924_PATCH_COUNT)
+    romPhasePatch(base, patchData + pm5644g924_patchStart[patchRow[y]]);
   if (insLeft.count) textFillBox(base, INS_L_X0, INS_L_X1, INS_Y0, INS_Y1, y, GFX_BLACK);
   if (insRight.count) textFillBox(base, INS_R_X0, INS_R_X1, INS_Y0, INS_Y1, y, GFX_BLACK);
   textDrawRow(base, &idLine, y, textInkId());
@@ -99,13 +120,7 @@ static void pm5644g924RenderRow(uint8_t *base, int y) {
   movingLineDrawRow(base, y);   // last, so the stripe crosses the text unbroken
 }
 
-// The two chroma reference bars, decoded from the EPROM's two PAL phase
-// frames. In pixel pairs of the 720 sample line: left (pure
-// R-Y) pairs 3..27, pixels 6..55; right (pure B-Y) pairs 332..345, pixels
-// 664..691. The frames are byte-identical except the chroma of these bars.
-static const PhasePairRange pm5644g924PhaseBars[] = {{3, 27}, {332, 345}};
-
 const Pattern PATTERN_PM5644G924 = {LANG_CARD_PM5644_16X9, pm5644g924Init, pm5644g924RenderRow,
                                     pm5644g924Tick, false, false, pm5644g924Reflow,
-                                    nullptr, false, false,
-                                    pm5644g924PhaseBars, 2};
+                                    nullptr, true, false,
+                                    nullptr, true};

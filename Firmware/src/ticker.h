@@ -26,15 +26,23 @@ void tickerBegin();
 // Advance one step. Once per picture, from videoFrameHook().
 void tickerFrame();
 
+// Core1's share: the transparent band in a big face (Inter, Doto) is laid
+// over rows core0 has already built, between core1's own DMA reloads,
+// one glyph at a time until deadline (time_us_32()). Rows it has not
+// finished when they go out leave without the band and are counted.
+// True when it had a band row to work on this call.
+bool tickerCore1Step(uint32_t deadline);
+
+// More room for the big face's glyph streams, or none (nullptr): the ROM
+// cards' table while a card that leaves it idle is up. Takes effect at the
+// next tickerBegin(), which also waits for core1 to let go of the old.
+void tickerSetScratch(uint8_t *p, uint32_t bytes);
+void tickerTakeCore1Stats(uint32_t *rows, uint32_t *late, uint32_t *us);
+
 // Holds the band off while a card is being copied: the copy only runs
 // while the ring buffer is above its threshold, and the band is what
 // pulls it down. Safe to call for every row.
 void tickerPause(bool v);
-
-// An uploaded photograph has no room left in its row budget for the
-// band on top. Set at every card change so transparent falls back to
-// solid rather than a stale setting bringing the picture down.
-void tickerAllowTransparent(bool v);
 
 // Does row y have to be drawn as a bar INSTEAD of the card? Only true
 // in the solid mode.

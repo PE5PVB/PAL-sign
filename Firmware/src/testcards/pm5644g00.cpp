@@ -1,8 +1,14 @@
 // The PM5644 test card of the older generation (G00), straight out of
-// the original Philips EPROMs: EPROM dumps converted to BT.601 levels,
-// sampled at exactly 13.5 MHz so they pass through BT.656 one for one.
-// The two narrow chroma test bars left/right are the PAL switch test
-// from the specification (deliberately noise-like per line).
+// the original Philips EPROMs, played the way the generator plays them
+// (tools/pm5644_eprom.py): sampled at exactly 13.5 MHz, so every sample
+// passes through BT.656 one for one, the line edges included.
+//
+// Two PAL phase frames: the second differs only in the chroma of the
+// anti-PAL bars (PM5644 manual 3.8.2: non-alternating R-Y left,
+// line-alternating B-Y right) and, on some rows, a strip from the left
+// edge for the burst gate check. It is stored as chroma patches on the
+// first (pm5644g00_phase.h) and laid on per row by videoPhaseRow(),
+// which changes at field 2 as the generator does.
 #include <pico.h>
 #include <string.h>
 
@@ -16,9 +22,11 @@
 #include "../movingline.h"
 #include "../pattern.h"
 #include "pm5644g00_data.h"
+#include "pm5644g00_phase.h"
 #include "../rompattern.h"
 #include "../settings.h"
 #include "../textoverlay.h"
+#include "../video.h"
 
 static_assert(PM5644G00_RUN_COUNT <= ROM_MAX_RUNS, "raise ROM_MAX_RUNS in rompattern.h");
 static_assert(PM5644G00_PAL_SIZE <= ROM_MAX_PAL, "raise ROM_MAX_PAL in rompattern.h");
@@ -37,10 +45,10 @@ static const int INS_Y0 = 267, INS_Y1 = 307;
 
 static TextOverlay idLine, subLine, insLeft, insRight;
 
-// All three row indices in RAM (3456 bytes), so switching variant
-// touches no flash.
-static uint16_t lineInRam[3][ROM_ROWS];
-static bool lineRamReady = false;
+// The phase patches in RAM, like the run tables (a row reads them
+// scattered): the stream, and the row index of the variant in use.
+static uint8_t patchData[PM5644G00_PATCH_BYTES];
+static uint8_t patchRow[ROM_ROWS];
 
 // Which EPROM variant belongs to which mode; the black boxes are part
 // of the picture data, so this switches with it.
@@ -64,17 +72,16 @@ static void pm5644g00Tick() {
 }
 
 static void pm5644g00Init() {
-  if (!lineRamReady) {
-    memcpy(lineInRam, pm5644g00_line, sizeof(lineInRam));
-    lineRamReady = true;
-  }
+  const int variant = variantFor(insertGetMode());
+  memcpy(patchData, pm5644g00_patchData, sizeof(patchData));
+  memcpy(patchRow, pm5644g00_patchRow[variant], sizeof(patchRow));
 
   RomTables t;
   t.pal = pm5644g00_pal;
   t.idx = pm5644g00_idx;
   t.len = pm5644g00_len;
   t.start = pm5644g00_start;
-  t.line = lineInRam[variantFor(insertGetMode())];
+  t.line = pm5644g00_line + variant * ROM_ROWS;
   t.palSize = PM5644G00_PAL_SIZE;
   t.runCount = PM5644G00_RUN_COUNT;
   t.uniqueLines = PM5644G00_UNIQUE_LINES;
@@ -106,6 +113,8 @@ static void pm5644g00Init() {
 
 static void pm5644g00RenderRow(uint8_t *base, int y) {
   romRenderRow(base, y);
+  if (videoPhaseRow() && patchRow[y] < PM5644G00_PATCH_COUNT)
+    romPhasePatch(base, patchData + pm5644g00_patchStart[patchRow[y]]);
   textDrawRow(base, &idLine, y, textInkId());
   textDrawRow(base, &subLine, y, textInkSub());
   textDrawRow(base, &insLeft, y, textInkInsert());
@@ -113,14 +122,7 @@ static void pm5644g00RenderRow(uint8_t *base, int y) {
   movingLineDrawRow(base, y);   // last, so the stripe crosses the text unbroken
 }
 
-// The two chroma reference bars flanking the centre circle carry opposite
-// subcarrier phase on the EPROM's two PAL phase frames. In pixel pairs of
-// the 720 sample line: the left one (pure R-Y) is pairs 16..34, pixels
-// 32..69; the right one (pure B-Y) is pairs 324..343, pixels 648..687.
-// Everything else is identical between the frames.
-static const PhasePairRange pm5644g00PhaseBars[] = {{16, 34}, {324, 343}};
-
 const Pattern PATTERN_PM5644G00 = {LANG_CARD_PM5644, pm5644g00Init, pm5644g00RenderRow, pm5644g00Tick,
                                    false, false, pm5644g00Reflow,
-                                   nullptr, false, false,
-                                   pm5644g00PhaseBars, 2};
+                                   nullptr, true, false,
+                                   nullptr, true};

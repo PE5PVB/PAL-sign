@@ -10,6 +10,9 @@
 #include "rletext.h"
 #include "settings.h"
 #include "ticker_font.h"
+#include "aspect.h"
+#include "pattern.h"
+#include "videoloop.h"
 
 static_assert(TICKER_MAX_CHARS == CFG_TICKER_MAX, "the ticker text sizes have drifted apart");
 
@@ -175,6 +178,16 @@ struct BigGlyph {
 static BigGlyph bigCache[TICKER_GLYPH_MAX];
 static int bigN = 0;
 static int bigUsedA = 0, bigUsedB = 0;   // bytes taken of glyphRam resp. ringRam
+// A third pool when the card on screen lends one (tickerSetScratch()):
+// on a photograph the rows come out of flash and flush the XIP cache, so
+// a glyph left in flash costs core1 a cache miss on every band row.
+static uint8_t *bigExtra = nullptr;
+static int bigExtraSize = 0, bigUsedC = 0;
+
+void tickerSetScratch(uint8_t *p, uint32_t bytes) {
+  bigExtra = p;
+  bigExtraSize = p ? (int)bytes : 0;
+}
 
 static const BigGlyph *bigG[TICKER_MAX_CHARS];
 
@@ -197,8 +210,7 @@ static const Font *face = &FONTS[0];
 // row of the band, while cfgTickerMode() and the Font itself live in
 // flash. Same reason the routines carry __not_in_flash_func.
 static int runMode = TICKER_OFF;
-static bool paused = false;
-static bool allowTransparent = true;
+static volatile bool paused = false;
 static int faceRows = 0;
 static uint8_t faceSx = 1, faceSy = 1;
 static int faceCapTop = 0;   // see Font's own capTop/capRows in font_data.h
@@ -318,6 +330,12 @@ static uint8_t *bigAlloc(int len) {
     bigUsedB += len;
     return p;
   }
+  bigUsedC = (bigUsedC + 1) & ~1;
+  if (bigExtra && bigUsedC + len <= bigExtraSize) {
+    uint8_t *p = bigExtra + bigUsedC;
+    bigUsedC += len;
+    return p;
+  }
   return 0;
 }
 
@@ -408,7 +426,11 @@ static void rebuildVisible() {
   }
 }
 
-void tickerBegin() {
+// Bumped before and after every layout (odd while it runs), so core1
+// never draws from tables halfway through being rewritten.
+static volatile uint32_t layoutSeq = 0;
+
+static void tickerLayout() {
   int fi = cfgTickerFont();
   if (fi < 0 || fi >= FONT_COUNT) fi = 0;
   bigFace = bigFaceFor(fi, cfgTickerSize());
@@ -419,7 +441,6 @@ void tickerBegin() {
   faceSy = f->sy;
   faceCapTop = f->capTop;
   runMode = cfgCardTicker();
-  if (runMode == TICKER_TRANSPARENT && !allowTransparent) runMode = TICKER_SOLID;
 
   tickerInk = yccFromRgb(cfgCardColor(-1, CFG_COLOR_TICKER));
 
@@ -480,6 +501,7 @@ void tickerBegin() {
     bigN = 0;
     bigUsedA = 0;
     bigUsedB = 0;
+    bigUsedC = 0;
 
     // The pools filled most frequent character first: the room holds
     // about eight glyphs and a message repeats its letters, so the
@@ -573,13 +595,75 @@ void tickerBegin() {
   rebuildVisible();
 }
 
+// True while core1 is inside tickerCore1Step(), so a layout can wait for
+// it to let go of the glyph streams before they move or their pool goes.
+static volatile bool core1InOverlay = false;
+
+void tickerBegin() {
+  layoutSeq = layoutSeq + 1;
+  __sync_synchronize();
+  // Core1 checks the sequence before every glyph, so from here on it only
+  // has to finish the one it is in; bounded, in case it never comes back.
+  const uint32_t t0 = time_us_32();
+  while (core1InOverlay && time_us_32() - t0 < 2000) tight_loop_contents();
+  tickerLayout();
+  __sync_synchronize();
+  layoutSeq = layoutSeq + 1;
+}
+
+// What core1 needs of one picture, kept for two pictures by their parity:
+// core1 runs up to a ring behind core0, so it can still be laying the
+// band over the last rows of one picture while core0 has moved on.
+struct OverlayFrame {
+  uint32_t seq;      // the layout it was made with
+  int32_t offset;
+  int16_t bandY, bandH, capRow;
+  int16_t first[2], last[2];   // per turn, the glyphs on screen: [first, last)
+  YCbCr ink;
+  bool on, skipRow0, keepEdges;
+};
+static OverlayFrame overlayFrame[2];
+
+static void tickerStep();
+
 void tickerFrame() {
+  tickerStep();
+  // For the picture core0 starts now: its line 1 is ring slot
+  // videoProducedCount, so the parity of that slot's picture number picks
+  // the entry (VIDEO_RENORM_STEP keeps it, being an even number of
+  // pictures).
+  OverlayFrame &f = overlayFrame[(videoProducedCount / VIDEO_LINES_PER_FRAME) & 1];
+  f.on = false;
+  __sync_synchronize();
+  f.seq = layoutSeq;
+  f.offset = offset;
+  f.bandY = (int16_t)bandY;
+  f.bandH = (int16_t)bandH;
+  f.capRow = (int16_t)(bandY + bandMargin);
+  f.ink = tickerInk;
+  // The glyphs on screen per turn, as rebuildVisible() finds them, so
+  // core1 walks only those.
+  for (int turn = 0; turn < 2; turn++) {
+    const int base = turn * turnW - offset;
+    int i = 0;
+    while (i < gn && base + gx[i] + gw[i] <= 0) i++;
+    int j = i;
+    while (j < gn && base + gx[j] < SCREEN_W) j++;
+    f.first[turn] = (int16_t)i;
+    f.last[turn] = (int16_t)j;
+  }
+  f.skipRow0 = aspectGet() != ASPECT_OFF;   // line 23 carries the WSS then
+  f.keepEdges = activePattern->keepEdges;
+  __sync_synchronize();
+  f.on = runMode == TICKER_TRANSPARENT && bigFace >= 0 && gn > 0 && !activePattern->rawSignal;
+}
+
+static void tickerStep() {
   // Once a picture, so the row routines never have to reach into flash
   // for it. Also where a change of card is picked up: the mode is kept
   // per card, and selectPattern() has told settings.cpp which card is
   // active by the time this runs.
   runMode = cfgCardTicker();
-  if (runMode == TICKER_TRANSPARENT && !allowTransparent) runMode = TICKER_SOLID;
   if (runMode == TICKER_OFF || gn == 0) return;
   int v = cfgTickerSpeed();
   if (v < -8) v = -8;
@@ -715,31 +799,8 @@ void __not_in_flash_func(tickerOverlayRow)(uint8_t *base, int y) {
   if (y < bandY || y >= bandY + bandH) return;
   const uint32_t t0 = time_us_32();
 
-  if (bigFace >= 0) {
-    // All the rings first, then the ink: the ring of the next letter
-    // would otherwise eat into the ink of the one before it. The ring
-    // bitmaps are three wider on every side than the ink and their own
-    // rows start EDGE_TOTAL above it.
-    const int capRow = bandY + bandMargin;
-    for (int i = 0; i < visN; i++) {
-      const BigGlyph *g = vis[i].big;
-      if (!g || !g->h) continue;
-      const int rr = y - (capRow + g->yoff - EDGE_TOTAL);
-      if (rr < 0 || rr >= g->h + 2 * EDGE_TOTAL) continue;
-      rleDarkenRow(base, vis[i].x + g->lsb - EDGE_TOTAL, g->rrle + g->roff[rr],
-                   g->rrle + g->roff[rr + 1], SCREEN_W);
-    }
-    for (int i = 0; i < visN; i++) {
-      const BigGlyph *g = vis[i].big;
-      if (!g || !g->h) continue;
-      const int r = y - (capRow + g->yoff);
-      if (r < 0 || r >= g->h) continue;
-      rleBlendRow(base, vis[i].x + g->lsb, g->rle + g->off[r], g->rle + g->off[r + 1],
-                  bigLut, tickerInk.Y, tickerInk.Cb, tickerInk.Cr, SCREEN_W);
-    }
-    statAdd(time_us_32() - t0);
-    return;
-  }
+  // A big face is laid on by core1; see tickerCore1Step().
+  if (bigFace >= 0) return;
 
   // Three rows wider on either side than the ink, as far as the outer
   // ring reaches. The range is settled first and the font row worked
@@ -805,12 +866,126 @@ void __not_in_flash_func(tickerOverlayRow)(uint8_t *base, int y) {
   statAdd(time_us_32() - t0);
 }
 
-void __not_in_flash_func(tickerPause)(bool v) { paused = v; }
+// Where core1 is: the ring slot it works on and how far into it (pass 0
+// the rings, 1 the ink; turn and glyph as in rebuildVisible()).
+static uint32_t ovSlot = 0;
 
-void tickerAllowTransparent(bool v) {
-  allowTransparent = v;
-  if (!v && runMode == TICKER_TRANSPARENT) runMode = TICKER_SOLID;
+// Whether ring slot s carries a band row to lay on, and which picture row.
+static bool __not_in_flash_func(overlayRowOf)(uint32_t s, int *row) {
+  const uint32_t line = s % VIDEO_LINES_PER_FRAME + 1;
+  const bool field2 = line >= 313;
+  const uint32_t fl = field2 ? line - 312 : line;
+  int activeY = -1;
+  if (!field2 && fl >= 23 && fl <= 310) activeY = (int)fl - 23;
+  if (field2 && fl >= 24 && fl <= 311) activeY = (int)fl - 24;
+  if (activeY < 0) return false;
+  const int y = activeY * 2 + (field2 ? 1 : 0);
+  const OverlayFrame &f = overlayFrame[(s / VIDEO_LINES_PER_FRAME) & 1];
+  const uint32_t seq = layoutSeq;
+  if (!f.on || paused || (seq & 1) || f.seq != seq || y < f.bandY || y >= f.bandY + f.bandH ||
+      (y == 0 && f.skipRow0))
+    return false;
+  *row = y;
+  return true;
 }
+static int ovPass = 0, ovTurn = 0, ovI = 0;
+static volatile uint32_t ovRows = 0, ovLate = 0, ovUs = 0;
+
+// One band row on core1, resumable: false when the deadline came first,
+// with the place kept for the next call. All the rings of every glyph
+// before any ink, as before: the ring of the next letter would otherwise
+// eat into the ink of the one before it.
+static bool __not_in_flash_func(overlayRowPart)(uint8_t *base, int y, const OverlayFrame &f,
+                                                uint32_t deadline) {
+  for (; ovPass < 2; ovPass++, ovTurn = 0, ovI = 0) {
+    for (; ovTurn < 2; ovTurn++, ovI = 0) {
+      const int turnX = ovTurn * turnW - f.offset;
+      if (ovI < f.first[ovTurn]) ovI = f.first[ovTurn];
+      for (; ovI < f.last[ovTurn]; ovI++) {
+        if (layoutSeq != f.seq) return true;   // being laid out again: give the row up
+        if ((int32_t)(time_us_32() - deadline) >= 0) return false;
+        const int x = turnX + gx[ovI];
+        const BigGlyph *g = bigG[ovI];
+        if (!g || !g->h) continue;
+        if (ovPass == 0) {
+          const int rr = y - (f.capRow + g->yoff - EDGE_TOTAL);
+          if (rr < 0 || rr >= g->h + 2 * EDGE_TOTAL) continue;
+          rleDarkenRow(base, x + g->lsb - EDGE_TOTAL, g->rrle + g->roff[rr],
+                       g->rrle + g->roff[rr + 1], SCREEN_W);
+        } else {
+          const int r = y - (f.capRow + g->yoff);
+          if (r < 0 || r >= g->h) continue;
+          // The ring is solid black under all of the ink, chroma 128.
+          rleBlendRow(base, x + g->lsb, g->rle + g->off[r], g->rle + g->off[r + 1], bigLut,
+                      f.ink.Y, f.ink.Cb, f.ink.Cr, SCREEN_W,
+                      f.ink.Cb != 128 || f.ink.Cr != 128);
+        }
+      }
+    }
+  }
+  return true;
+}
+
+bool __not_in_flash_func(tickerCore1Step)(uint32_t deadline) {
+  core1InOverlay = true;
+  __sync_synchronize();
+  const uint32_t t0 = time_us_32();
+  bool worked = false;
+  for (;;) {
+    // Only rows not yet handed to the DMA: the one loaded last is read
+    // as soon as the row going out now ends, and a glyph begun just
+    // before the deadline could still be writing into it then.
+    const uint32_t first = videoConsumedCount;
+    const int32_t ahead = (int32_t)(ovSlot - first);
+    if (ahead < 0 || ahead > (int32_t)VIDEO_RING_SIZE) {
+      // Every band row passed over counts, begun or not.
+      if (ahead < 0) {
+        int y;
+        for (uint32_t s = ovSlot; s != first; s++) {
+          if (overlayRowOf(s, &y)) ovLate = ovLate + 1;
+        }
+      }
+      ovSlot = first;
+      ovPass = ovTurn = ovI = 0;
+    }
+    if ((int32_t)(videoProducedCount - ovSlot) <= 0) break;   // not built yet
+    if ((int32_t)(time_us_32() - deadline) >= 0) break;
+
+    // The picture row of this slot, the mapping videoBuildLine() uses.
+    int y;
+    if (!overlayRowOf(ovSlot, &y)) {
+      ovSlot++;
+      ovPass = ovTurn = ovI = 0;
+      continue;
+    }
+    const OverlayFrame &f = overlayFrame[(ovSlot / VIDEO_LINES_PER_FRAME) & 1];
+    uint8_t *base = videoRing[ovSlot % VIDEO_RING_SIZE] + 4;   // past the SAV
+    worked = true;
+    if (!overlayRowPart(base, y, f, deadline)) break;
+    if (!f.keepEdges) {
+      // BT.601 line blanking, as videoBuildLine() did before the band.
+      uint32_t *w = (uint32_t *)base;
+      for (int i = 0; i < 5; i++) w[i] = 0x10801080u;
+      for (int i = 356; i < 360; i++) w[i] = 0x10801080u;
+    }
+    ovRows = ovRows + 1;
+    ovSlot++;
+    ovPass = ovTurn = ovI = 0;
+  }
+  ovUs = ovUs + (time_us_32() - t0);
+  __sync_synchronize();
+  core1InOverlay = false;
+  return worked;
+}
+
+void tickerTakeCore1Stats(uint32_t *rows, uint32_t *late, uint32_t *us) {
+  *rows = ovRows;
+  *late = ovLate;
+  *us = ovUs;
+  ovRows = ovLate = ovUs = 0;
+}
+
+void __not_in_flash_func(tickerPause)(bool v) { paused = v; }
 
 int tickerMode() { return runMode; }
 

@@ -34,7 +34,7 @@ Run from the tools directory; Doto.ttf sits next to this script.
 from PIL import Image, ImageDraw, ImageFont
 
 from contest_rle import emit_rle
-from make_contest_font import RING, ring_of
+from make_contest_font import RING, ring_of, smooth_glyph
 
 # Byte for byte the CHARS of make_fonts.py / make_contest_font.py's own
 # CHARSET, so every character that can be typed exists in this face too.
@@ -58,7 +58,7 @@ def caps_band(size):
     return b[1], b[3]
 
 
-def build_into(f, cap_target, prefix, struct, rings):
+def build_into(f, cap_target, prefix, struct, rings, smooth=False):
     """The CAP/TOP/BOTTOM constants, the glyph tokens and the struct
     table for one face, written into an already open file. Split out of
     build() below so make_ticker_font.py can write the shared preamble
@@ -75,6 +75,7 @@ def build_into(f, cap_target, prefix, struct, rings):
           f"(target {cap_target})")
 
     glyphs = []
+    ringdata = {}
     for ch in CHARSET:
         adv = max(1, round(font.getlength(ch)))
         if ch == " ":
@@ -84,7 +85,11 @@ def build_into(f, cap_target, prefix, struct, rings):
         crop = img.crop(b)
         lsb = b[0] - ORIGIN[0]
         yoff = b[1] - cap_top
-        glyphs.append((ch, crop.width, crop.height, yoff, lsb, adv, crop.tobytes()))
+        data, h = crop.tobytes(), crop.height
+        if smooth:
+            data, ringdata[ch], h = smooth_glyph(data, crop.width, h)
+            yoff -= 1
+        glyphs.append((ch, crop.width, h, yoff, lsb, adv, data))
 
     f.write(f"static const int {prefix}_CAP = {cap_bot - cap_top};\n")
     top = min(y for _, _, h, y, _, _, _ in glyphs if h)
@@ -97,8 +102,8 @@ def build_into(f, cap_target, prefix, struct, rings):
             continue
         total += emit_rle(f, f"{prefix}_{i}", data, w, h)
         if rings:
-            total += emit_rle(f, f"{prefix}_{i}_RING",
-                              ring_of(data, w, h), w + 2 * RING, h + 2 * RING)
+            ring = ringdata[ch] if smooth else ring_of(data, w, h)
+            total += emit_rle(f, f"{prefix}_{i}_RING", ring, w + 2 * RING, h + 2 * RING)
     f.write(f"\nstatic const {struct} {prefix}[{len(glyphs)}] = {{\n")
     for i, (ch, w, h, yoff, lsb, adv, data) in enumerate(glyphs):
         code = 0x01 if ch == "Ø" else ord(ch)

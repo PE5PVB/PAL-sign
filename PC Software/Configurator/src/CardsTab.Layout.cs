@@ -53,6 +53,7 @@ public partial class CardsTab
         _pcmEmphasis.Visible = true;
         _pcmCtrlPic.Visible = true;
         _pcmTextRow.Visible = true;
+        _legacyTextRow.Visible = true;
         _hamQualityRow.Visible = true;
         _clockTextRow.Visible = true;
         _clockColorRow.Visible = true;
@@ -89,12 +90,17 @@ public partial class CardsTab
         _pcmEmphasis.Visible = false;
         _pcmCtrlPic.Visible = false;
         _pcmTextRow.Visible = false;
+        _legacyTextRow.Visible = false;
         _hamQualityRow.Visible = false;
         _clockTextRow.Visible = false;
         _clockColorRow.Visible = false;
         _insertLabel.Visible = false;
         _insHost.Visible = false;
     }
+
+    // Kept for EqualPreviewSize(): the grid and its options cell.
+    private TableLayoutPanel _root = null!;
+    private Control _options = null!;
 
     private Control BuildLayout()
     {
@@ -111,15 +117,11 @@ public partial class CardsTab
 
         root.Controls.Add(_list, 0, 0);
         root.SetRowSpan(_list, 2);
-        root.Controls.Add(BuildOptions(), 1, 0);
+        _options = BuildOptions();
+        root.Controls.Add(_options, 1, 0);
+        _root = root;
         root.Controls.Add(BuildPreviewHolder(), 1, 1);
 
-        var buttons = new FlowLayoutPanel
-            { Dock = DockStyle.Fill, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        buttons.Controls.Add(_upload);
-        buttons.Controls.Add(_empty);
-        root.Controls.Add(buttons, 0, 2);
-        root.SetColumnSpan(buttons, 2);
         return root;
     }
 
@@ -254,6 +256,14 @@ public partial class CardsTab
             { Text = UiText.PcmText, AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, 0);
         _pcmTextRow.Controls.Add(_pcmText, 1, 0);
         _own.Controls.Add(_pcmTextRow);
+        _legacyTextRow = new TableLayoutPanel
+            { ColumnCount = 2, AutoSize = true, Margin = new Padding(0), Visible = false };
+        _legacyTextRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _legacyTextRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _legacyTextRow.Controls.Add(new Label
+            { Text = UiText.LegacyText, AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, 0);
+        _legacyTextRow.Controls.Add(_legacyText, 1, 0);
+        _own.Controls.Add(_legacyTextRow);
         _hamQualityRow = new TableLayoutPanel
             { ColumnCount = 2, AutoSize = true, Margin = new Padding(0), Visible = false };
         _hamQualityRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -303,7 +313,15 @@ public partial class CardsTab
         // No Label above the panel: DrawPreview paints the title itself,
         // pinned just above the picture.
         t.Controls.Add(_preview);
-        t.Controls.Add(_saveAs);
+        // A photo slot's own two buttons share the row with Save as
+        // picture, which every card has: the row keeps one height, so the
+        // preview above does not shrink on a photo slot.
+        var buttons = new FlowLayoutPanel
+            { AutoSize = true, WrapContents = false, Anchor = AnchorStyles.None, Margin = new Padding(0) };
+        buttons.Controls.Add(_upload);
+        buttons.Controls.Add(_empty);
+        buttons.Controls.Add(_saveAs);
+        t.Controls.Add(buttons);
         return t;
     }
 
@@ -353,6 +371,7 @@ public partial class CardsTab
         _pcmEmphasis.Enabled = on;
         _pcmCtrlPic.Enabled = on;
         _pcmText.Enabled = on;
+        _legacyText.Enabled = on;
         _hamQuality.Enabled = on;
     }
 }

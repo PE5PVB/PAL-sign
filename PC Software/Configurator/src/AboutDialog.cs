@@ -13,8 +13,12 @@ public sealed class AboutDialog : Form
     // One version for the whole PC side: the configurator and the PCM
     // decoder ship together from the same repository, so they carry
     // the same number.
-    public const string Version = "1.1";
-    public const string VersionDate = "10 October 2026";
+    public const string Version = "1.2";
+    public const string VersionDate = "11 October 2026";
+
+    // What the connected board reported, for the About box; null when no
+    // board is connected.
+    public static string? BoardFirmware;
 
     private AboutDialog(string app, bool splash)
     {
@@ -26,7 +30,7 @@ public sealed class AboutDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(400, splash ? 150 : 196);
+        ClientSize = new Size(400, splash ? 150 : 220);
 
         var name = new Label
         {
@@ -46,6 +50,14 @@ public sealed class AboutDialog : Form
         Controls.Add(name);
         Controls.Add(ver);
         Controls.Add(who);
+        if (!splash && BoardFirmware != null)
+        {
+            Controls.Add(new Label
+            {
+                Text = "Board firmware: " + BoardFirmware,
+                AutoSize = true, ForeColor = Theme.Muted, Location = new Point(26, 136),
+            });
+        }
 
         if (splash)
         {

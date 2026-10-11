@@ -66,22 +66,28 @@ MAX_RUN = 255  # so that a run length fits in a byte
 # rounded. With 64 levels the deviation in flat areas is zero and none
 # of it is visible.
 SETS = {
+    # Straight from the EPROM dumps, exactly as the generator plays them
+    # (tools/pm5644_eprom.py): no resampling and no chroma shift, so the
+    # chroma leads the luma just as in the original. The variants are
+    # PAL phase frame 0; frame 1 differs only in chroma, written as
+    # per-row patches (write_phase_patches()).
     "pm5644g00": {
         "title": "PM5644 (G00)",
-        # Chroma leads luma in this set; see shift_chroma(). The value was
-        # found by shifting and measuring again until the skew matched the
-        # cards that are drawn: it leaves 1.5 ns of the original 105.
-        "chroma_shift": 1.412,
-        "variants": ["PM5644G00_pat0", "PM5644G00_pat1", "PM5644G00_pat2"],
+        "source": "eprom",
+        "patterns": [0, 1, 2],
+        "variants": ["pat0", "pat1", "pat2"],
         "note": ("variant 0 = both insert boxes (date and time), "
-                        "1 = the right one only (time), 2 = neither, grid running through"),
+                 "1 = the right one only (time), 2 = neither, grid running through"),
     },
+    # Straight from the EPROM dumps as well (pm5644_eprom.g924_frame()),
+    # but averaged down to 707 samples: this generation samples at 20 MHz.
+    # No chroma shift, as on the G00.
     "pm5644g924": {
         "title": "PM5644 (G924)",
-        # Idem, 212 ns of chroma lead, 0.3 ns left over.
-        "chroma_shift": 2.862,
-        "variants": ["PM5644G924_pat0", "PM5644G924_pat1", "PM5644G924_pat2",
-                      "PM5644G924_pat3"],
+        "source": "eprom",
+        "model": "g924",
+        "patterns": [0, 1, 2, 3],
+        "variants": ["pat0", "pat1", "pat2", "pat3"],
         "note": ("0 = date and time, 1 = time only, 2 = neither; "
                         "3 = as 0 but without the chroma test bars"),
         "levels": 64,
@@ -420,6 +426,16 @@ def convert(name, cfg):
                                       cfg.get("max_error"))
             frames.append(f)
             print("  %s: read" % b)
+    elif cfg.get("source") == "eprom":
+        import pm5644_eprom
+        second = []
+        play = pm5644_eprom.g924_frame if cfg.get("model") == "g924" else pm5644_eprom.frame
+        for n in cfg["patterns"]:
+            frames.append(play(n, 0))
+            second.append(play(n, 1))
+            print("  vector table %d: both frames played from the EPROMs" % n)
+        write_phase_patches(name, frames, second)
+        pad = 6 if cfg.get("model") == "g924" else 0   # what the frame builder puts in front
     elif cfg.get("source") == "hacktv":
         f, pad = build_frame_hacktv(cfg["file"], cfg["levels"], cfg["levels_chroma"],
                                     cfg.get("mono", False), cfg.get("max_error"))
@@ -432,6 +448,85 @@ def convert(name, cfg):
             print("  %s: read" % sub)
 
     encode_and_write(name, cfg, frames, pad)
+
+
+def write_phase_patches(name, first, second):
+    """The second PAL phase frame as chroma patches on the first.
+
+    The two frames of the G00 have identical luma; only the chroma of a
+    few pixel-pair ranges differs (the anti-PAL reference bars, and on
+    some rows a strip from the left edge). Per row that is a patch:
+    ranges of pairs with their frame 1 Cb and Cr. Unique patches are
+    stored once in a byte stream (per patch: range count; per range: first
+    pair low, high, pair count, then Cb,Cr per pair); row[variant][row]
+    is the patch of that row, 0xFF for none.
+    """
+    patches, patch_of, rows = [], {}, []
+    for a, b in zip(first, second):
+        a = a.reshape(ACTIVE_ROWS, SCREEN_W // 2, 4)
+        b = b.reshape(ACTIVE_ROWS, SCREEN_W // 2, 4)
+        if (a[:, :, 1::2] != b[:, :, 1::2]).any():
+            raise SystemExit("the two phase frames differ in luma; a chroma patch cannot carry that")
+        idx = []
+        for r in range(ACTIVE_ROWS):
+            d = np.where((a[r, :, 0] != b[r, :, 0]) | (a[r, :, 2] != b[r, :, 2]))[0].tolist()
+            if not d:
+                idx.append(0xFF)
+                continue
+            ranges, s, p = [], d[0], d[0]
+            for x in d[1:]:
+                if x != p + 1:
+                    ranges.append((s, p))
+                    s = x
+                p = x
+            ranges.append((s, p))
+            blob = [len(ranges)]
+            for s, e in ranges:
+                blob += [s & 0xFF, s >> 8, e - s + 1]
+                for k in range(s, e + 1):
+                    blob += [int(b[r, k, 0]), int(b[r, k, 2])]
+            key = bytes(blob)
+            if key not in patch_of:
+                patch_of[key] = len(patches)
+                patches.append(key)
+            idx.append(patch_of[key])
+        rows.append(idx)
+    if len(patches) >= 0xFF:
+        raise SystemExit("too many phase patches for a byte index")
+    stream, start = b"", []
+    for p in patches:
+        start.append(len(stream))
+        stream += p
+    P = name.upper()
+    out = ["// GENERATED by tools/convert_rom_pattern.py -- do not edit by hand.",
+           "//",
+           "// The second PAL phase frame as chroma patches on the first; see",
+           "// write_phase_patches() there for the format.",
+           "#ifndef %s_PHASE_H" % P,
+           "#define %s_PHASE_H" % P,
+           "",
+           "#include <stdint.h>",
+           "",
+           "static const int %s_PATCH_COUNT = %d;" % (P, len(patches)),
+           "static const int %s_PATCH_BYTES = %d;" % (P, len(stream)),
+           "",
+           "static const uint16_t %s_patchStart[%d] = {%s};"
+           % (name, len(start), ", ".join(str(s) for s in start)),
+           "",
+           "static const uint8_t %s_patchData[%d] = {" % (name, len(stream))]
+    for i in range(0, len(stream), 16):
+        out.append("    " + ", ".join(str(v) for v in stream[i:i + 16]) + ",")
+    out += ["};", "", "static const uint8_t %s_patchRow[%d][%d] = {" % (name, len(rows), ACTIVE_ROWS)]
+    for idx in rows:
+        out.append("    {")
+        for i in range(0, ACTIVE_ROWS, 24):
+            out.append("        " + ", ".join(str(v) for v in idx[i:i + 24]) + ",")
+        out.append("    },")
+    out += ["};", "#endif  // %s_PHASE_H" % P, ""]
+    with io.open("%s/%s_phase.h" % (OUT_DIR, name), "w", encoding="utf-8", newline=chr(10)) as fh:
+        fh.write(chr(10).join(out))
+    print("  phase frame 1: %d unique chroma patches, %d bytes, on %d rows"
+          % (len(patches), len(stream), sum(v != 0xFF for idx in rows for v in idx)))
 
 
 def encode_and_write(name, cfg, frames, pad):

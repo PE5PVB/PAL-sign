@@ -43,6 +43,16 @@ public class MainWindow : Form
     // the board, which decides what the Connect/Disconnect button offers.
     private bool _connected;
 
+    /// <summary>For the --previewsizes check: picks the port by name.</summary>
+    internal bool SelectPort(string name)
+    {
+        for (int i = 0; i < _ports.Items.Count; i++)
+        {
+            if (_ports.Items[i] as string == name) { _ports.SelectedIndex = i; return true; }
+        }
+        return false;
+    }
+
     private readonly ComboBox _ports = new()
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
@@ -184,11 +194,22 @@ public class MainWindow : Form
         // So the list and the preview on the Cards tab follow a
         // slideshow the board is stepping through on its own.
         slides.RunningChanged = _cards.SetSlideshowRunning;
-        _cards.Settings = cfg => { system.Adopt(cfg); slides.Adopt(cfg); };
+        _cards.Settings = cfg =>
+        {
+            system.Adopt(cfg);
+            slides.Adopt(cfg);
+            AboutDialog.BoardFirmware = cfg.Firmware.Length > 0 ? cfg.Firmware : UiText.FirmwareOlder;
+            Text = UiText.AppTitle + "  ·  " + UiText.BoardFirmware + " " + AboutDialog.BoardFirmware;
+        };
         _cards.Live = on =>
         {
             _connected = on;
             _connect.Text = on ? UiText.Disconnect : UiText.Connect;
+            if (!on)
+            {
+                AboutDialog.BoardFirmware = null;
+                Text = UiText.AppTitle;
+            }
         };
         // A shared setting can put CardsTab's pictures out of date; it
         // catches up at Connect and after a save.

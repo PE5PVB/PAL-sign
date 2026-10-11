@@ -33,6 +33,7 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--layout") return Layout(args);
         if (args.Length > 0 && args[0] == "--preview") return Preview(args);
         if (args.Length > 0 && args[0] == "--screenshot") return Screenshot(args);
+        if (args.Length > 0 && args[0] == "--previewsizes") return PreviewSizes(args);
         if (args.Length > 0 && args[0] == "--ttimport") return TtImport(args);
 
         ApplicationConfiguration.Initialize();
@@ -292,6 +293,49 @@ internal static class Program
     // display. Dev-only, the same off-screen trick as --layout.
     //
     //     PAL-sign.exe --screenshot <outdir>
+    // --previewsizes <port> [out.txt]: connects to the board, selects every
+    // card in turn and writes down the size the preview is drawn at, so
+    // "every card the same size" can be checked against a real board.
+    private static int PreviewSizes(string[] args)
+    {
+        string port = args.Length > 1 ? args[1] : "";
+        string target = args.Length > 2 ? args[2] : "previewsizes.txt";
+        ApplicationConfiguration.Initialize();
+        var win = new MainWindow();
+        win.StartPosition = FormStartPosition.Manual;
+        win.Location = new Point(-32000, -32000);
+        win.Show();
+        Application.DoEvents();
+        var tabs = FindTabs(win);
+        CardsTab? cards = null;
+        if (tabs != null)
+            foreach (TabPage p in tabs.TabPages) if (p is CardsTab ct) cards = ct;
+        if (cards == null || !win.SelectPort(port))
+        {
+            Console.WriteLine("no Cards tab, or port " + port + " not in the list");
+            Environment.Exit(1);
+        }
+        cards!.ConnectNow();
+        var until = DateTime.Now.AddSeconds(30);
+        while (cards.CardCount == 0 && DateTime.Now < until)
+        {
+            Application.DoEvents();
+            System.Threading.Thread.Sleep(20);
+        }
+        var outp = new System.Text.StringBuilder();
+        for (int i = 0; i < cards.CardCount; i++) outp.AppendLine(cards.ProbePreview(i));
+        File.WriteAllText(target, outp.ToString());
+        // And how the first card looks, next to the numbers.
+        if (cards.CardCount > 0)
+        {
+            cards.ProbePreview(0);
+            Capture(win, Path.ChangeExtension(target, ".png"));
+        }
+        Console.WriteLine($"{cards.CardCount} cards written to {target}");
+        Environment.Exit(0);
+        return 0;
+    }
+
     private static int Screenshot(string[] args)
     {
         string dir = args.Length > 1 ? args[1] : ".";

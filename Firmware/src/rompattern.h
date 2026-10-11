@@ -83,4 +83,10 @@ void romRenderRow(uint8_t *base, int y);
 // change is still copying in.
 void romRenderFrom(const uint32_t *pal, const uint16_t *idx, const uint8_t *len,
                    const uint32_t *start, const uint16_t *line, int lines, uint8_t *base, int y);
+
+// Lays one row's patch of a second PAL phase frame over the chroma of
+// the first: the format of write_phase_patches() in
+// tools/convert_rom_pattern.py (range count; per range first pair low,
+// high, pair count, then Cb,Cr per pair).
+void romPhasePatch(uint8_t *base, const uint8_t *patch);
 #endif  // ROMPATTERN_H

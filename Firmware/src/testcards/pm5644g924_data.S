@@ -29,8 +29,8 @@ pm5644g924_line:
 .global pm5644g924_len
 pm5644g924_len:
 #include "pm5644g924_len.inc.h"
-// pm5644g924_pal.inc.h: 36699 bytes
-// pm5644g924_idx.inc.h: 446394 bytes
-// pm5644g924_len.inc.h: 234918 bytes
-// pm5644g924_start.inc.h: 4736 bytes
-// pm5644g924_line.inc.h: 11637 bytes
+// pm5644g924_pal.inc.h: 36151 bytes
+// pm5644g924_idx.inc.h: 445280 bytes
+// pm5644g924_len.inc.h: 234453 bytes
+// pm5644g924_start.inc.h: 4734 bytes
+// pm5644g924_line.inc.h: 11845 bytes
