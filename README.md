@@ -3,10 +3,10 @@
 # PAL-sign
 Advanced CVBS PAL test card generator, built around an RP2350 and an ADV7391 video encoder
 
-A standalone hardware test card generator for anyone working with analogue television: an ATV contest, aligning a transmitter or receiver, or just needing a proper PAL B/G composite signal on the bench. Twenty broadcast-standard test cards, generated in real time and sent out as CVBS, no PC required to run it.
+A standalone hardware test card generator for anyone working with analogue television: an ATV contest, aligning a transmitter or receiver, or just needing a proper PAL B/G composite signal on the bench. Twenty-six built-in test cards, generated in real time and sent out as CVBS, no PC required to run it.
 
 ## Features
-- Twenty built-in test cards: PM5644 (4:3 and 16:9), BBC Cards F/G/W, FuBK (full, simple and 16:9), EBU colour bars and black & white, Crosshatch, Multiburst, Pulse & Bar, sin(x)/x, Mixed bars, Picdream, four ATV Contest pages and a TVE card
+- Twenty-six built-in test cards: PM5644 (4:3 and 16:9) and the monochrome PM5644 Indian Head monoscope, BBC Cards F/G/W, FuBK (full, simple and 16:9), EBU colour bars and black & white, the ADV7391's own internal colour bars, Crosshatch, Multiburst, Pulse & Bar, sin(x)/x, Mixed bars, Picdream, a BATC card and the BATC Legacy card of the BBC Micro era, four ATV Contest pages with callsign, contest number, locator and frequency, a TVE card and an analogue TV clock
 - Fourteen Custom slots for your own pictures, uploaded from the PC tool
 - BBC Test Card F and W can each show a photo of your own instead of the original, centred and uploaded from the PC tool
 - Teletext, WSS aspect ratio signalling and Insertion Test Signal (ITS) support
@@ -14,7 +14,8 @@ A standalone hardware test card generator for anyone working with analogue telev
 - A scrolling ticker band, colour, speed and size configurable per card
 - An on-device menu on its own screen, driven by a rotary encoder, so every setting is reachable without a PC
 - Optional PCM audio: with a PCM1808 ADC attached, two extra cards embed stereo sound in the picture itself (see "PCM audio" below)
-- A Windows configurator to upload your own pictures and change every setting from a PC
+- A real-time clock with a backup cell on the board (RV-3028-C7 or RV-3032-C7), so date and time survive a power cut; the on-screen clocks follow summer time automatically if you let them
+- A Windows configurator to upload your own pictures and change every setting from a PC; it reconnects to the port it used last time
 
 ## Controls and settings
 Everything below is reachable from the on-device screen and knob, or from the PC tool; the two show the same settings.
@@ -27,7 +28,7 @@ A small screen and a rotary encoder on the front, entirely optional: unplug that
 - Holding the knob down while powering the board on starts a five-second on-screen countdown; holding through the whole countdown runs a full factory reset (every setting back to its default) once it finishes, releasing early cancels it.
 
 ### The per-card menu (short press)
-What is offered depends on the card: one with no room for a ticker will not offer one, and one with no clock box will not offer a colour for it. Between them, the twenty cards can offer:
+What is offered depends on the card: one with no room for a ticker will not offer one, and one with no clock box will not offer a colour for it. Between them, the cards can offer:
 - Enabled: whether stepping through the cards can land on this one; a disabled card keeps its settings, it is just skipped
 - Ticker: off, solid or transparent (transparent only on a built-in card, an uploaded photo has no room budget for it), its vertical position, speed and direction, one of five sizes and four fonts, and its colour
 - Aspect ratio: nine WSS modes, off, 4:3 full frame, 14:9 letterbox (centred or at the top), 14:9 full frame, 16:9 letterbox (centred or at the top), 16:9 anamorphic, and a wider-than-16:9 letterbox, switching the ADV7391's own wide screen signalling to match
@@ -35,7 +36,7 @@ What is offered depends on the card: one with no room for a ticker will not offe
 - The moving line, on the cards that have one
 - The insert boxes (a running clock, or fixed text instead): off, time only, date and time, or the fixed text
 - The text font used for all of the above
-- A handful of card-specific extras: the PM5644 16:9's chroma test bars, Test Card G's AP2 variant, the ATV Contest pages' three lines (callsign, locator, frequency) and contest number, each of the four pages on its own, and BBC Test Card F/W's own switch for a custom photo instead of the original
+- A handful of card-specific extras: the PM5644 16:9's chroma test bars, Test Card G's AP2 variant, the ATV Contest pages' three lines (callsign, locator, frequency) and contest number, each of the four pages on its own, BATC Legacy's third text line, and BBC Test Card F/W's own switch for a custom photo instead of the original
 
 ### The System menu (long press)
 - Text: the first and second identification line, the ticker message, and the fixed text an insert box shows instead of a running clock
@@ -43,7 +44,7 @@ What is offered depends on the card: one with no room for a ticker will not offe
 - Two cycles: the ADV7391's luma and chroma filter presets
 - The screen's own brightness
 - The date and time, set field by field, kept automatically in step with summer time if that switch is on
-- Enabling or disabling any of the twenty cards, without touching what is currently on air
+- Enabling or disabling any of the cards, without touching what is currently on air
 - Seven analogue controls on the ADV7391 itself: DAC gain, Y scale, brightness, hue, the luma peaking filter (SSAF), and the luma and chroma delay
 
 ### The slideshow
@@ -56,7 +57,7 @@ A scrolling text band that can run on almost any card, configured per card as li
 Both cards have their own oval photo window built in; the PC tool's "Upload portrait..." button lets you put your own picture there instead. The two windows are not quite the same size or shape, so one upload feeds both: choose a photo, drag it and use the zoom slider until the right part sits inside both outlines shown on the preview, and both are cut out and sent in one step. Each card keeps its own on/off switch (see the per-card menu above), so you can show your photo on one, the original on the other, or either everywhere.
 
 ## Test cards
-Six of the twenty, captured straight off the composite output.
+Nine of the twenty-six. The first five were captured straight off the composite output; the BATC card, BATC Legacy and the TV clock are frame dumps read back from the board, and the ATV Contest page is drawn from the firmware's own glyph tables, exactly as the board renders it.
 
 <table>
 <tr>
@@ -67,7 +68,12 @@ Six of the twenty, captured straight off the composite output.
 <tr>
 <td width="33%"><img src="images/testcard-f.png" width="100%" alt="BBC Test Card F"><br><b>BBC Test Card F</b><br>The well known girl-and-clown card, rebuilt from the original photo scan, surrounded by colour bars, resolution wedges and a grey scale.</td>
 <td width="33%"><img src="images/mixed-bars.png" width="100%" alt="Mixed bars"><br><b>Mixed bars</b><br>The same eight colour bars twice: once in colour, once with the chroma stripped out, so the bottom row shows exactly the brightness each colour bar carries.</td>
-<td width="33%"><img src="images/atv-contest.png" width="100%" alt="ATV Contest"><br><b>ATV Contest</b><br>Callsign, contest number, locator and working frequency in large, legible digits, meant to be read off a weak or noisy signal during a contest.</td>
+<td width="33%"><img src="images/atv-contest.png" width="100%" alt="ATV Contest"><br><b>ATV Contest</b><br>Callsign, contest number, locator and working frequency in large, legible digits, meant to be read off a weak or noisy signal during a contest. There are four of these pages, each with its own texts and number, so a station can switch between contests or bands with one click of the knob; the frequency line uses a smaller face so that a 10 GHz frequency fits in full.</td>
+</tr>
+<tr>
+<td width="33%"><img src="images/batc.png" width="100%" alt="BATC card"><br><b>BATC card</b><br>Laid out after a BATC repeater card: a frequency staircase on top, seven rows of ever finer bars down to a 4 MHz square wave, the callsign large beside colour bars, and reversed bars with a grey staircase below.</td>
+<td width="33%"><img src="images/batc-legacy.png" width="100%" alt="BATC Legacy"><br><b>BATC Legacy</b><br>The amateur television test card of the BBC Micro era, after the G7GTN version of the BATC book's "Test Card with Call sign": the callsign large, with two text lines under the colour bars, the lower one its own setting.</td>
+<td width="33%"><img src="images/tv-clock.png" width="100%" alt="TV clock"><br><b>TV clock</b><br>A full-picture analogue clock after the TV Klok of depips.nl, with the second hand stepping once a second, driven by the board's real-time clock; the identification lines sit in the corner.</td>
 </tr>
 </table>
 
@@ -86,7 +92,10 @@ One RP2350 core works out the pixel data for the current picture, line by line, 
 Teletext, the widescreen signalling (WSS) and the insertion test signal (ITS) are not produced by a separate chip. They are ordinary picture data: a handful of lines in the vertical blanking interval, the lines you never actually see, above and below the visible picture, get filled with luma samples that decode into the teletext bits or the WSS code, exactly like any other line of picture content decodes into a colour. The firmware works out that waveform itself, pulse by pulse, to the shape the relevant standard requires, and writes it straight into the same buffer the ADV7391 streams out.
 
 ### Test cards and your own pictures
-The twenty built-in test cards are pixel data compiled straight into the firmware; several of them, the PM5644 and BBC cards, come from the original EPROM dumps of real broadcast test card generators. Alongside those sit fourteen Custom slots: plain picture data reserved in the last part of the 16 MB flash chip, which you fill from the PC tool over the same USB serial connection used for firmware uploads.
+The twenty-six built-in test cards are pixel data compiled straight into the firmware; several of them, the PM5644 and BBC cards, come from the original EPROM dumps of real broadcast test card generators. Alongside those sit fourteen Custom slots: plain picture data reserved in the last part of the 16 MB flash chip, which you fill from the PC tool over the same USB serial connection used for firmware uploads.
+
+### The clock
+The clocks in the picture, the PM5644's centre box, the TV clock and the date and time inserts, run on a real-time clock chip on the board, a Micro Crystal RV-3028-C7 or, on the newer board variant, an RV-3032-C7; the firmware looks for both at power-on and drives whichever it finds. A rechargeable ML2032 cell keeps that chip running through a power cut, trickle charged from the board's own supply, so the time only has to be set once, from the menu or the PC tool. A board without either chip still keeps time while it is powered, but starts from a fixed default date at every power-on until the time is set again.
 
 ### The screen and the knob
 The screen on the front is a plain SPI display, and the knob next to it is an ordinary quadrature rotary encoder, decoded from a GPIO interrupt so a fast turn is never missed; see "Controls and settings" above for what they do.
@@ -132,8 +141,9 @@ Plus supply and GND for the ADC board. The PCM1808's mode pins go high for maste
 
 ## Repository layout
 - `Firmware/` -- the firmware for the RP2350, built with PlatformIO or the Arduino IDE
-- `PC Software/` -- the Windows configurator, see [its own README](PC%20Software/README.md) for how to build and use it
+- `PC Software/` -- the Windows configurator and the PCM decoder, see [the configurator's README](PC%20Software/Configurator/README.md) for how to build it
 - `Hardware/Kicad/` -- the PCB design
+- `Hardware/RV-3032-C7 version/` -- the same board with the RV-3032-C7 as its real-time clock, for when the RV-3028-C7 is hard to get
 
 ## Building the firmware
 ```
