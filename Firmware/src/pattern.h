@@ -80,7 +80,14 @@ extern const Pattern PATTERN_FUBKNOCIRCLE;  // FUBK 4:3 without the centre circl
 extern const Pattern PATTERN_INTERNBAR;   // colour bars from the encoder itself
 extern const Pattern PATTERN_PULSEBAR;    // test signal, pulse and bar
 extern const Pattern PATTERN_SINXX;       // test signal, sin(x)/x
-extern const Pattern PATTERN_CONTEST;     // black picture, large text and a counter
+// The four contest pages: black picture, large text and a counter,
+// each with its own texts and number (settings.h, CONTEST_PAGES).
+extern const Pattern PATTERN_CONTEST1;
+extern const Pattern PATTERN_CONTEST2;
+extern const Pattern PATTERN_CONTEST3;
+extern const Pattern PATTERN_CONTEST4;
+// Which contest page a card is (0 based), or -1 for any other card.
+int contestPageOf(const Pattern *p);
 extern const Pattern PATTERN_TESTCARDF;   // BBC Test Card F, raw out of flash
 extern const Pattern PATTERN_TESTCARDG;   // BBC Test Card G
 extern const Pattern PATTERN_TESTCARDW;   // BBC Test Card W, 16:9

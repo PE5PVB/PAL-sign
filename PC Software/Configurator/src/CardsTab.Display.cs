@@ -96,12 +96,15 @@ public partial class CardsTab
             _pcmBits.SelectedIndex = (c.Option & 1) != 0 ? 1 : 0;
             _pcmEmphasis.Checked = (c.Option & 2) != 0;
             _pcmCtrlPic.Checked = (c.Option & 4) != 0;
-            _contest1.Text = _cfg.Contest1;
-            _contest2.Text = _cfg.Contest2;
-            _contestNr.Value = Math.Clamp(_cfg.ContestNr, 0, 9999);
+            int cp = Math.Clamp(c.ContestPage - 1, 0, BoardSettings.ContestPages - 1);
+            _contest1.Text = _cfg.Contest1[cp];
+            _contest2.Text = _cfg.Contest2[cp];
+            _contest3.Text = _cfg.Contest3[cp];
+            _contestNr.Value = Math.Clamp(_cfg.ContestNr[cp], 0, 9999);
             // What came off the board counts as sent; see SendOnLeave().
             _contest1.Tag = _contest1.Text;
             _contest2.Tag = _contest2.Text;
+            _contest3.Tag = _contest3.Text;
             _hamQuality.SelectedIndex = c.Option & 3;
             _clockText.SelectedIndex = c.Option & 1;
             _pcmText.Text = _cfg.PcmText;

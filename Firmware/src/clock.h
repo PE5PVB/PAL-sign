@@ -1,5 +1,5 @@
-// Running date and time for the test pattern. On a board with an
-// RV-3028 RTC (rv3028.h) that chip is the timekeeper: loaded at boot,
+// Running date and time for the test pattern. On a board with an RTC
+// (rtc.h: RV-3028-C7 or RV-3032-C7) that chip is the timekeeper: loaded at boot,
 // written on every set, and re-anchored hourly. Without one the clock
 // starts at config.h's values and runs on the system clock alone,
 // drifting a few seconds a day (same crystal as the pixel clock).

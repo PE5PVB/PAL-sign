@@ -88,18 +88,25 @@ void cfgSetTestcardgAp2(bool v);
 void cfgSetSlideFadeOn(bool v);
 void cfgSetDstAutoOn(bool v);
 
-// --- contest page ----------------------------------------------------
+// --- contest pages ---------------------------------------------------
+//
+// Four of them, each with its own two lines, frequency line and
+// number; page counts 0..CONTEST_PAGES-1. A page out of range reads
+// page 0 and sets nothing.
+static const int CONTEST_PAGES = 4;
 static const int CONTEST_NUMBER_MAX = 9999;
 
-const char *cfgContestText1();
-const char *cfgContestText2();
-int cfgContestNumber();
+const char *cfgContestText1(int page);
+const char *cfgContestText2(int page);
+const char *cfgContestText3(int page);   // the frequency line
+int cfgContestNumber(int page);
 int cfgContestScaleText();
 int cfgContestScaleNumber();
 
-void cfgSetContestText1(const char *s);
-void cfgSetContestText2(const char *s);
-void cfgSetContestNumber(int v);
+void cfgSetContestText1(int page, const char *s);
+void cfgSetContestText2(int page, const char *s);
+void cfgSetContestText3(int page, const char *s);
+void cfgSetContestNumber(int page, int v);
 
 // --- the card to start with ------------------------------------------
 int cfgStartPattern();
@@ -208,6 +215,10 @@ static const uint8_t CARD_TRAIT_LINE = 0x20;       // moving-line box (observed)
 static const uint8_t CARD_TRAIT_SUB = 0x40;        // second text line (observed)
 static const uint8_t CARD_TRAIT_FIXEDFONT = 0x80;  // its own lettering is not a font choice
 void cfgSetCardTraits(int card, uint8_t traits);
+// Which contest page a card shows (0..CONTEST_PAGES-1), -1 for every
+// other card; told once at boot like the traits, read by the checksum.
+void cfgSetCardContestPage(int card, int page);
+int cfgCardContestPage(int card);
 uint8_t cfgCardTraits(int card);
 
 bool cfgDirty();

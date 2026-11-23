@@ -13,8 +13,8 @@ public sealed class AboutDialog : Form
     // One version for the whole PC side: the configurator and the PCM
     // decoder ship together from the same repository, so they carry
     // the same number.
-    public const string Version = "1.2";
-    public const string VersionDate = "11 October 2026";
+    public const string Version = "1.3";
+    public const string VersionDate = "23 November 2026";
 
     // What the connected board reported, for the About box; null when no
     // board is connected.

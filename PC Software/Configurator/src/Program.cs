@@ -249,7 +249,7 @@ internal static class Program
         "BBC Card F", "BBC Card G", "TVE Card", "PM5644 16:9",
         "FUBK 16:9", "BBC Card W", "Colorbar", "Indian Head BW",
         "EBU BW", "Pulse & Bar", "sin(x)/x", "Multiburst",
-        "ATV Contest", "Custom 1 (uploadable, key u)",
+        "ATV Contest 1", "Custom 1 (uploadable, key u)",
     };
 
     private static int Preview(string[] args)

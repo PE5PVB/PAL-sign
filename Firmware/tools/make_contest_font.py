@@ -221,6 +221,13 @@ def main():
     build(110, "../src/testcards/batc_font.h", "BATC_FONT", "ContestGlyph",
           rings=False, whom="the BATC card",
           glyph_h="../runglyph.h")
+    # The contest page's frequency line: the same face at 60 row
+    # capitals, so a frequency with decimals and the unit (up to
+    # "10368.100 MHZ") fits the 680 px box, which the 90 row face
+    # cannot hold past eight characters.
+    build(60, "../src/testcards/contest_freq_font.h", "CONTEST_FREQ_FONT", "ContestGlyph",
+          rings=False, whom="the contest page's frequency line",
+          glyph_h="../runglyph.h")
     # The ticker face (TICKER_FONT) is no longer built here: it shares
     # src/ticker_font.h with the Doto face, see make_ticker_font.py.
 

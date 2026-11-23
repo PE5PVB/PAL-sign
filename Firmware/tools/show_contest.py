@@ -2,7 +2,7 @@
 Recomputes the layout of the contest page, without a board.
 
     python tools/show_contest.py
-    python tools/show_contest.py --text1 PA0ABC --text2 JO32AA --number 1234
+    python tools/show_contest.py --text1 PA0ABC --text2 JO32AA --text3 "1255.000 MHZ" --number 1234
     python tools/show_contest.py --png after.png --hard before.png
     python tools/show_contest.py --measure
 
@@ -45,7 +45,8 @@ SCREEN_W, SCREEN_H = 720, 576
 
 # Must be equal to the constants in src/testcards/contest.cpp.
 BOX_X0, BOX_X1 = 20, 700
-BOXES = {"text top": (40, 150), "number": (200, 376), "text bottom": (426, 536)}
+BOXES = {"text top": (40, 140), "number": (164, 312), "text bottom": (336, 436),
+         "text freq": (460, 530)}
 
 
 def read_fonts():
@@ -338,6 +339,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--text1", default="PE5PVB")
     p.add_argument("--text2", default="JO21QM")
+    p.add_argument("--text3", default="1255.000 MHZ")
     p.add_argument("--number", type=int, default=1)
     # Default equal to CFG_CONTEST_SCALE_TEXT and _NUMBER in src/config.h.
     p.add_argument("--scale-text", type=int, default=5)
@@ -351,7 +353,8 @@ def main():
 
     rows = (("text top", a.text1, a.scale_text),
             ("number", "%04d" % a.number, a.scale_number),
-            ("text bottom", a.text2, a.scale_text))
+            ("text bottom", a.text2, a.scale_text),
+            ("text freq", a.text3, a.scale_text))
 
     for name, g, f in read_fonts():
         print("=== %s: %d rows, scale %dx%d, digit width %d, letter spacing %d"

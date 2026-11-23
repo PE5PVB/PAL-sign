@@ -6,7 +6,7 @@ Advanced CVBS PAL test card generator, built around an RP2350 and an ADV7391 vid
 A standalone hardware test card generator for anyone working with analogue television: an ATV contest, aligning a transmitter or receiver, or just needing a proper PAL B/G composite signal on the bench. Twenty broadcast-standard test cards, generated in real time and sent out as CVBS, no PC required to run it.
 
 ## Features
-- Twenty built-in test cards: PM5644 (4:3 and 16:9), BBC Cards F/G/W, FuBK (full, simple and 16:9), EBU colour bars and black & white, Crosshatch, Multiburst, Pulse & Bar, sin(x)/x, Mixed bars, Picdream, an ATV Contest card and a TVE card
+- Twenty built-in test cards: PM5644 (4:3 and 16:9), BBC Cards F/G/W, FuBK (full, simple and 16:9), EBU colour bars and black & white, Crosshatch, Multiburst, Pulse & Bar, sin(x)/x, Mixed bars, Picdream, four ATV Contest pages and a TVE card
 - Fourteen Custom slots for your own pictures, uploaded from the PC tool
 - BBC Test Card F and W can each show a photo of your own instead of the original, centred and uploaded from the PC tool
 - Teletext, WSS aspect ratio signalling and Insertion Test Signal (ITS) support
@@ -35,7 +35,7 @@ What is offered depends on the card: one with no room for a ticker will not offe
 - The moving line, on the cards that have one
 - The insert boxes (a running clock, or fixed text instead): off, time only, date and time, or the fixed text
 - The text font used for all of the above
-- A handful of card-specific extras: the PM5644 16:9's chroma test bars, Test Card G's AP2 variant, the ATV Contest card's two lines and contest number, and BBC Test Card F/W's own switch for a custom photo instead of the original
+- A handful of card-specific extras: the PM5644 16:9's chroma test bars, Test Card G's AP2 variant, the ATV Contest pages' three lines (callsign, locator, frequency) and contest number, each of the four pages on its own, and BBC Test Card F/W's own switch for a custom photo instead of the original
 
 ### The System menu (long press)
 - Text: the first and second identification line, the ticker message, and the fixed text an insert box shows instead of a running clock
@@ -67,7 +67,7 @@ Six of the twenty, captured straight off the composite output.
 <tr>
 <td width="33%"><img src="images/testcard-f.png" width="100%" alt="BBC Test Card F"><br><b>BBC Test Card F</b><br>The well known girl-and-clown card, rebuilt from the original photo scan, surrounded by colour bars, resolution wedges and a grey scale.</td>
 <td width="33%"><img src="images/mixed-bars.png" width="100%" alt="Mixed bars"><br><b>Mixed bars</b><br>The same eight colour bars twice: once in colour, once with the chroma stripped out, so the bottom row shows exactly the brightness each colour bar carries.</td>
-<td width="33%"><img src="images/atv-contest.png" width="100%" alt="ATV Contest"><br><b>ATV Contest</b><br>Callsign, contest number and locator in large, legible digits, meant to be read off a weak or noisy signal during a contest.</td>
+<td width="33%"><img src="images/atv-contest.png" width="100%" alt="ATV Contest"><br><b>ATV Contest</b><br>Callsign, contest number, locator and working frequency in large, legible digits, meant to be read off a weak or noisy signal during a contest.</td>
 </tr>
 </table>
 

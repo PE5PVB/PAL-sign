@@ -177,7 +177,12 @@ public class MainWindow : Form
                 _system.Forget();
                 _slides.Forget();
             }
-            else _cards.ConnectNow();
+            else
+            {
+                // Remembered for the next run, see RefreshPorts().
+                Prefs.LastPort = _ports.SelectedItem as string;
+                _cards.ConnectNow();
+            }
         };
         _blink.Tick += (_, _) => Blink();
         Blink();   // the disabled look applies from the first frame, not the first tick
@@ -376,9 +381,11 @@ public class MainWindow : Form
         else MessageBox.Show(this, UiText.FirmwareUpdateDone, UiText.FirmwareUpdateTitle);
     }
 
+    // The port last connected to is chosen when it is there, otherwise
+    // whatever was chosen before the refresh, otherwise the first one.
     private void RefreshPorts()
     {
-        string? current = _ports.SelectedItem as string;
+        string? current = _ports.SelectedItem as string ?? Prefs.LastPort;
         _ports.Items.Clear();
         foreach (string p in BoardUpload.Ports()) _ports.Items.Add(p);
         if (_ports.Items.Count > 0)

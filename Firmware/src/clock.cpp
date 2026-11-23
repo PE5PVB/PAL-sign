@@ -3,7 +3,8 @@
 #include <pico/time.h>
 
 #include "config.h"
-#include "rv3028.h"
+#include "civil.h"
+#include "rtc.h"
 #include "settings.h"
 
 // Seconds since 1970, anchored to the chip's microsecond counter.
@@ -11,30 +12,6 @@
 // (dstActiveStandard() below).
 static int64_t epochBase = 0;
 static uint64_t usBase = 0;
-
-// Calendar date <-> day number, Howard Hinnant's algorithm.
-static int64_t daysFromCivil(int y, int m, int d) {
-  y -= m <= 2;
-  const int64_t era = (y >= 0 ? y : y - 399) / 400;
-  const unsigned yoe = (unsigned)(y - era * 400);
-  const unsigned doy = (153u * (unsigned)(m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned)d - 1;
-  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-  return era * 146097 + (int64_t)doe - 719468;
-}
-
-static void civilFromDays(int64_t z, int *y, int *m, int *d) {
-  z += 719468;
-  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-  const unsigned doe = (unsigned)(z - era * 146097);
-  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  const unsigned doy = doe - (365u * yoe + yoe / 4 - yoe / 100);
-  const unsigned mp = (5u * doy + 2) / 153;
-  const unsigned dd = doy - (153u * mp + 2) / 5 + 1;
-  const unsigned mm = mp + (mp < 10 ? 3 : -9);
-  *y = (int)((int64_t)yoe + era * 400 + (mm <= 2 ? 1 : 0));
-  *m = (int)mm;
-  *d = (int)dd;
-}
 
 // EU summer time (Directive 2000/84/EC): 01:00 UTC on the last Sunday
 // of March and October, 02:00 standard time here (fixed CET offset).
@@ -78,20 +55,20 @@ void clockSet(int year, int month, int day, int hour, int min, int sec) {
   const int64_t e = standardEpochOf(year, month, day, hour, min, sec);
   anchor(e);
   // The RTC keeps standard time; the DST hour goes back on at read.
-  if (rv3028Present()) {
+  if (rtcPresent()) {
     const int64_t days = e / 86400;
     int y, m, d;
     civilFromDays(days, &y, &m, &d);
     const int64_t rem = e - days * 86400;
-    rv3028WriteTime(y, m, d, weekdayOf(days), (int)(rem / 3600), (int)((rem / 60) % 60),
-                    (int)(rem % 60), e);
+    rtcWriteTime(y, m, d, weekdayOf(days), (int)(rem / 3600), (int)((rem / 60) % 60),
+                 (int)(rem % 60), e);
   }
 }
 
 bool clockBegin() {
-  rv3028Begin();
+  rtcBegin();
   int64_t e;
-  if (rv3028ReadTime(&e)) {
+  if (rtcReadTime(&e)) {
     anchor(e);
     return true;
   }
@@ -107,13 +84,13 @@ bool clockBegin() {
 // so once an hour the clock is pulled back onto the RTC. The 2 s dead
 // band keeps the on-screen seconds from twitching on every sync.
 void clockService() {
-  if (!rv3028Present()) return;
+  if (!rtcPresent()) return;
   static uint64_t lastUs = 0;
   const uint64_t now = time_us_64();
   if (now - lastUs < 3600000000ull) return;
   lastUs = now;
   int64_t e;
-  if (!rv3028ReadTime(&e)) return;
+  if (!rtcReadTime(&e)) return;
   const int64_t local = epochBase + (int64_t)((time_us_64() - usBase) / 1000000u);
   if (e - local >= 2 || local - e >= 2) anchor(e);
 }

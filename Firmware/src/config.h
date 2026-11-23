@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 // The version on the splash of the little panel.
-#define CFG_VERSION "v1.11"
+#define CFG_VERSION "v1.12"
 
 // Station identification. Allowed: A-Z, 0-9, space, the slashed O and
 // : ! ? / @ # * _ + < > - . , = ( )   Lower case becomes upper case.
@@ -156,11 +156,13 @@ static const bool CFG_ITS = false;
 
 // --- Contest page -----------------------------------------------------
 //
-// Black picture, large white text: top line, bottom line, a counter in
-// the middle. Colour burst off, mono flag in pattern.h. Factory values;
-// all settable over serial and saved, see settings.h.
+// Black picture, large white text: top line, a counter, bottom line
+// and a frequency line under it. Colour burst off, mono flag in
+// pattern.h. Factory values; all settable over serial and saved, see
+// settings.h.
 static const char CFG_CONTEST_TEXT1[] = "MYCALL";
 static const char CFG_CONTEST_TEXT2[] = "MYQTH";
+static const char CFG_CONTEST_TEXT3[] = "";   // the frequency line, empty until set
 static const char CFG_PCM_TEXT[] = "MYCALL";   // the Ham PCM text channel, 10 characters
 static const char CFG_LEGACY_TEXT[] = "TV TEST TRANSMISSION.";   // BATC Legacy's third line
 static const int CFG_CONTEST_NUMBER = 1;

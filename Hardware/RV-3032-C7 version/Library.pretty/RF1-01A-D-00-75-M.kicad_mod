@@ -1,0 +1,155 @@
+(footprint "RF1-01A-D-00-75-M"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at -0.6 3.5 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "e2f7b1de-89c7-4551-8ad6-132ddc8a8252")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "RF1-01A-D-00-75-M"
+		(at 0 1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "08d1610b-a1da-4638-9dff-870b57f1c78d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "https://nl.mouser.com/datasheet/3/6015/1/rf1_01a_d_00_75_m_data_sheet.pdf"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "7a581e53-3464-498b-83b8-a622f77c4c35")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "BNC jack"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "e4826169-4cb6-4ff3-973f-e1120dc01011")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -2.3 4.4)
+		(end -2.3 19.2)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "ff172c22-fff6-43e6-bd54-5f26954d3484")
+	)
+	(fp_line
+		(start -2.3 4.4)
+		(end 12.4 4.4)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "828e6dd5-d702-4897-9dcc-437518b466e5")
+	)
+	(fp_line
+		(start -2.3 19.2)
+		(end 12.4 19.2)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "6e25117b-55cd-4c70-8ad8-f1aaa961fd85")
+	)
+	(fp_line
+		(start 12.4 4.4)
+		(end 12.4 19.2)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "9e98b09f-9338-4b9e-8165-9fe5f7f3ec60")
+	)
+	(fp_text user "RF1-01A-D-00-75-M"
+		(at 5.05 22 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "900d3083-a4d9-45c8-8ab1-25e9dc5e376a")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 2.7 3.4 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "0b512fcf-2d2e-4483-90e4-9453e03604bf")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole circle
+		(at 5.08 17.08)
+		(size 1.6 1.6)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "876c7406-cae6-481e-9a27-799b07296d5c")
+	)
+	(pad "2" thru_hole circle
+		(at 0 12)
+		(size 5 5)
+		(drill 2.3)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "2bf54f60-0e34-4948-9dff-b5a9f67e4cc2")
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 17.08)
+		(size 1.6 1.6)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "9b40a547-f2df-46d8-afa5-033b7c18f045")
+	)
+	(pad "2" thru_hole circle
+		(at 10.16 12)
+		(size 5 5)
+		(drill 2.3)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "a7fc4523-d9fb-4aeb-9705-a1d28ccc1faf")
+	)
+	(embedded_fonts no)
+)

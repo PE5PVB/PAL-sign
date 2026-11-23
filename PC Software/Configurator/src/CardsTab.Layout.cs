@@ -215,6 +215,7 @@ public partial class CardsTab
         }
         Line(UiText.ContestTopLine, _contest1);
         Line(UiText.ContestBottomLine, _contest2);
+        Line(UiText.ContestFrequency, _contest3);
         Line(UiText.ContestNumber, _contestNr);
 
         // Identification switch goes in a holder too, for the same
@@ -341,6 +342,7 @@ public partial class CardsTab
         // screenshotting the disconnected state.
         _contest1.Enabled = on;
         _contest2.Enabled = on;
+        _contest3.Enabled = on;
         _contestNr.Enabled = on;
         _contestNr.BackColor = on ? SystemColors.Window : Theme.Paper;
         _contestNr.ForeColor = on ? SystemColors.WindowText : Theme.Muted;

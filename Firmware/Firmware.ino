@@ -64,7 +64,7 @@
 #include "src/pcm1808.h"
 #include "src/asrc.h"
 #include "src/rompattern.h"
-#include "src/rv3028.h"
+#include "src/rtc.h"
 #include "src/settings.h"
 #include "src/teletext.h"
 #include "src/textoverlay.h"
@@ -83,7 +83,8 @@ static const Pattern *const PATTERNS[] = {
     &PATTERN_MIXEDBAR,   &PATTERN_PICDREAM,     &PATTERN_BATC,      &PATTERN_BBCMICRO,
     &PATTERN_PM5644G924, &PATTERN_FUBK16X9,     &PATTERN_TESTCARDW, &PATTERN_INTERNBAR,
     &PATTERN_PM5644G913, &PATTERN_EBUBW,        &PATTERN_PULSEBAR,  &PATTERN_SINXX,
-    &PATTERN_MULTIBURST, &PATTERN_CROSSHATCH,   &PATTERN_CONTEST,
+    &PATTERN_MULTIBURST, &PATTERN_CROSSHATCH,   &PATTERN_CONTEST1,  &PATTERN_CONTEST2,
+    &PATTERN_CONTEST3,   &PATTERN_CONTEST4,
     &PATTERN_CUSTOM1,      &PATTERN_CUSTOM2,   &PATTERN_CUSTOM3,
     &PATTERN_CUSTOM4,      &PATTERN_CUSTOM5,    &PATTERN_CUSTOM6,    &PATTERN_CUSTOM7,
     &PATTERN_CUSTOM8,      &PATTERN_CUSTOM9,    &PATTERN_CUSTOM10,   &PATTERN_CUSTOM11,
@@ -1343,7 +1344,7 @@ static void printSettings() {
   // otherwise misread the reply and hang with no clue why. Bump it
   // whenever the shape of anything below changes.
   Serial.println(LANG_CFG_BEGIN);
-  cfgLine(LANG_CFG_PROTO_D, 26);
+  cfgLine(LANG_CFG_PROTO_D, 27);
   cfgLine(LANG_CFG_CARDS_D, PATTERN_COUNT);
   cfgLine(LANG_CFG_ASPECTS_D, ASPECT_COUNT);
   cfgLine(LANG_CFG_INSERTS_D, INSERT_COUNT);
@@ -1355,8 +1356,15 @@ static void printSettings() {
   cfgLineText(LANG_TEXTID, cfgTextId());
   cfgLineText(LANG_TEXTSUB, cfgTextSub());
   cfgLineText(LANG_TICKERTEXT, cfgTickerText());
-  cfgLineText(LANG_CONTEST1, cfgContestText1());
-  cfgLineText(LANG_CONTEST2, cfgContestText2());
+  for (int p = 0; p < CONTEST_PAGES; p++) {
+    char nm[16];
+    snprintf(nm, sizeof(nm), LANG_CONTEST1_D, p + 1);
+    cfgLineText(nm, cfgContestText1(p));
+    snprintf(nm, sizeof(nm), LANG_CONTEST2_D, p + 1);
+    cfgLineText(nm, cfgContestText2(p));
+    snprintf(nm, sizeof(nm), LANG_CONTEST3_D, p + 1);
+    cfgLineText(nm, cfgContestText3(p));
+  }
   cfgLineText(LANG_PCMTEXT, cfgPcmText());
   cfgLineText(LANG_LEGACYTEXT, cfgLegacyText());
   cfgLineText(LANG_INSERTLEFT, cfgInsertLeft());
@@ -1370,7 +1378,7 @@ static void printSettings() {
     teletextRowText(r, txt, sizeof(txt));
     cfgLineTeletext(nm, txt);
   }
-  cfgLine(LANG_CFG_CONTESTNR_D, cfgContestNumber());
+  for (int p = 0; p < CONTEST_PAGES; p++) cfgLine(LANG_CFG_CONTESTNR_D_D, p + 1, cfgContestNumber(p));
   cfgLine(LANG_CFG_TELETEXT_D, teletextOn() ? 1 : 0);
   cfgLine(LANG_CFG_ITS_D, itsEnabled() ? 1 : 0);
   cfgLine(LANG_CFG_VBI_D, advVbiOpen() ? 1 : 0);
@@ -1461,6 +1469,7 @@ static void printSettings() {
             cfgCardMovingLine(i) ? 1 : 0, enab ? 1 : 0, slot >= 0 ? 1 : 0, own,
             (int)cfgCardIdSeen(i), (int)cfgCardBoxSeen(i), (int)cfgCardLineSeen(i),
             (int)cfgCardSubSeen(i), cfgCardCustomPhoto(i) ? 1 : 0, cfgCardOption(i),
+            cfgCardContestPage(i) + 1,
             (unsigned long)cfgCardColor(i, CFG_COLOR_TICKER),
             (unsigned long)cfgCardColor(i, CFG_COLOR_ID),
             (unsigned long)cfgCardColor(i, CFG_COLOR_SUB),
@@ -1727,10 +1736,16 @@ static void setSettingFromCommand(const char *line) {
     cfgSetTextSub(val);
   } else if (!strcmp(name, "tickertext")) {
     tickerSetText(val);
-  } else if (!strcmp(name, "contest1")) {
-    cfgSetContestText1(val);
-  } else if (!strcmp(name, "contest2")) {
-    cfgSetContestText2(val);
+  } else if (!strncmp(name, "contest", 7) && name[7] >= '1' && name[7] <= '3' && name[8] == '.') {
+    // contest1.<page> .. contest3.<page>, the page 1 based.
+    const int pg = atoi(name + 9) - 1;
+    if (pg < 0 || pg >= CONTEST_PAGES) {
+      Serial.println(LANG_CFG_FAILED_NO_SUCH_SETTING);
+      return;
+    }
+    if (name[7] == '1') cfgSetContestText1(pg, val);
+    else if (name[7] == '2') cfgSetContestText2(pg, val);
+    else cfgSetContestText3(pg, val);
   } else if (!strcmp(name, "pcmtext")) {
     cfgSetPcmText(val);
   } else if (!strcmp(name, "legacytext")) {
@@ -1739,8 +1754,13 @@ static void setSettingFromCommand(const char *line) {
     cfgSetInsertLeft(val);
   } else if (!strcmp(name, "insertright")) {
     cfgSetInsertRight(val);
-  } else if (!strcmp(name, "contestnr")) {
-    cfgSetContestNumber(num);
+  } else if (!strncmp(name, "contestnr.", 10)) {
+    const int pg = atoi(name + 10) - 1;
+    if (pg < 0 || pg >= CONTEST_PAGES) {
+      Serial.println(LANG_CFG_FAILED_NO_SUCH_SETTING);
+      return;
+    }
+    cfgSetContestNumber(pg, num);
   } else if (!strcmp(name, "teletext")) {
     teletextSetOn(num != 0);
   } else if (!strcmp(name, "its")) {
@@ -2017,27 +2037,30 @@ static void handleSerialChar(int ch) {
         return;
       }
 
+      // On a contest page N, S and C apply to that page's own lines
+      // and number; on every other card N and S go to the two insert
+      // boxes and C to the first contest page.
+      const int cp = contestPageOf(activePattern);
       if (cmdKind == 'N') {
-        // On the contest page N and S apply to the large lines there;
-        // on every other card, to the two insert boxes.
-        if (activePattern == &PATTERN_CONTEST) {
-          cfgSetContestText1(cmdLine);
-          report(LANG_CONTEST_TOP_LINE_S, cfgContestText1());
+        if (cp >= 0) {
+          cfgSetContestText1(cp, cmdLine);
+          report(LANG_CONTEST_TOP_LINE_S, cfgContestText1(cp));
         } else {
           cfgSetTextId(cmdLine);
           report(LANG_TEXT_TOP_BOX_S, cfgTextId());
         }
       } else if (cmdKind == 'S') {
-        if (activePattern == &PATTERN_CONTEST) {
-          cfgSetContestText2(cmdLine);
-          report(LANG_CONTEST_BOTTOM_LINE_S, cfgContestText2());
+        if (cp >= 0) {
+          cfgSetContestText2(cp, cmdLine);
+          report(LANG_CONTEST_BOTTOM_LINE_S, cfgContestText2(cp));
         } else {
           cfgSetTextSub(cmdLine);
           report(LANG_TEXT_BOTTOM_BOX_S, cfgTextSub());
         }
       } else if (cmdKind == 'C') {
-        cfgSetContestNumber(atoi(cmdLine));
-        report(LANG_CONTEST_NUMBER_04D, cfgContestNumber());
+        const int pg = cp < 0 ? 0 : cp;
+        cfgSetContestNumber(pg, atoi(cmdLine));
+        report(LANG_CONTEST_NUMBER_04D, cfgContestNumber(pg));
       } else if (cmdKind == 'Q') {
         setSequenceFromCommand(cmdLine);
       } else if (cmdKind == 'K') {
@@ -2861,12 +2884,16 @@ static int cmClockFaceIdx() { return cardColorIndexOf(CFG_COLOR_CLOCK_FACE); }
 static void cmClockFaceSet(int i) { cardColorSetKind(CFG_COLOR_CLOCK_FACE, i); }
 static int cmClockBackIdx() { return cardColorIndexOf(CFG_COLOR_CLOCK_BACK); }
 static void cmClockBackSet(int i) { cardColorSetKind(CFG_COLOR_CLOCK_BACK, i); }
-static const char *cmContest1Get() { return cfgContestText1(); }
-static void cmContest1Set(const char *s) { cfgSetContestText1(s); }
-static const char *cmContest2Get() { return cfgContestText2(); }
-static void cmContest2Set(const char *s) { cfgSetContestText2(s); }
-static int cmContestNrGet() { return cfgContestNumber(); }
-static void cmContestNrSet(int v) { cfgSetContestNumber(v); }
+// The contest page the menu's card shows; set by cardMenuBuild().
+static int cmContestPage = 0;
+static const char *cmContest1Get() { return cfgContestText1(cmContestPage); }
+static void cmContest1Set(const char *s) { cfgSetContestText1(cmContestPage, s); }
+static const char *cmContest2Get() { return cfgContestText2(cmContestPage); }
+static void cmContest2Set(const char *s) { cfgSetContestText2(cmContestPage, s); }
+static const char *cmContest3Get() { return cfgContestText3(cmContestPage); }
+static void cmContest3Set(const char *s) { cfgSetContestText3(cmContestPage, s); }
+static int cmContestNrGet() { return cfgContestNumber(cmContestPage); }
+static void cmContestNrSet(int v) { cfgSetContestNumber(cmContestPage, v); }
 
 typedef const char *(*CmTextGet)();
 typedef void (*CmTextSet)(const char *);
@@ -2970,6 +2997,7 @@ static void cardMenuBuild() {
   const bool hasLine = (traits & CARD_TRAIT_LINE) != 0;
   const bool hasBox = (traits & CARD_TRAIT_BOX) != 0;
   const bool hasContest = (traits & CARD_TRAIT_CONTEST) != 0;
+  cmContestPage = hasContest ? cfgCardContestPage(cardMenuCard) : 0;
   const bool hasG924 = (traits & CARD_TRAIT_G924) != 0;
   const bool hasCardG = (traits & CARD_TRAIT_CARDG) != 0;
   const bool fixedFont = (traits & CARD_TRAIT_FIXEDFONT) != 0;
@@ -3024,6 +3052,7 @@ static void cardMenuBuild() {
   if (hasContest) {
     cmAddText(LANG_CONTEST_FIRST_LINE, cmContest1Get, cmContest1Set, 31);
     cmAddText(LANG_CONTEST_SECOND_LINE, cmContest2Get, cmContest2Set, 31);
+    cmAddText(LANG_CONTEST_FREQUENCY_LINE, cmContest3Get, cmContest3Set, 31);
     cmAddSlider(LANG_CONTEST_NUMBER, cmContestNrGet, cmContestNrSet, 0, 9999, 1);
   }
   // No CARD_TRAIT bit for this, that byte is full; only these two cards
@@ -4158,7 +4187,9 @@ void setup() {
   // dump to say which card has a switch of its own.
   for (int i = 0; i < PATTERN_COUNT; i++) {
     uint8_t t = 0;
-    if (PATTERNS[i] == &PATTERN_CONTEST) t |= CARD_TRAIT_CONTEST;
+    const int contestPage = contestPageOf(PATTERNS[i]);
+    if (contestPage >= 0) t |= CARD_TRAIT_CONTEST;
+    cfgSetCardContestPage(i, contestPage);
     // The seventeen that draw the identification: also observed through
     // cfgTextIdShown() while a card lays itself out, which wins where
     // there is one; written out here too since a never-shown card has
@@ -4239,20 +4270,20 @@ void setup() {
   }
 
   // The clock, after advBringUp() because the RTC probe needs the I2C
-  // bus: from the RV-3028's supercap-backed time when the board has
-  // one and it was ever set, else the start values from config.h.
+  // bus: from the RTC's cell-backed time when the board has one and it
+  // was ever set, else the start values from config.h.
   if (clockBegin()) {
     ClockTime ct;
     clockGet(&ct);
     uint8_t st = 0, bk = 0;
-    rv3028Peek(&st, &bk);
-    Serial.printf(LANG_CLOCK_FROM_RTC_04D, ct.year, ct.month, ct.day, ct.hour, ct.min, ct.sec,
-                  st, bk);
+    rtcPeek(&st, &bk);
+    Serial.printf(LANG_CLOCK_FROM_RTC_04D, rtcName(), ct.year, ct.month, ct.day, ct.hour,
+                  ct.min, ct.sec, st, bk);
   } else {
     // Three answers, not two: a chip that is there but lost its time
-    // (PORF) points at the supercap or the switchover, not the bus.
+    // (PORF) points at the backup cell or the switchover, not the bus.
     uint8_t st = 0, bk = 0;
-    if (rv3028Peek(&st, &bk)) Serial.printf(LANG_CLOCK_RTC_TIME_LOST, st, bk);
+    if (rtcPeek(&st, &bk)) Serial.printf(LANG_CLOCK_RTC_TIME_LOST, rtcName(), st, bk);
     else Serial.println(LANG_CLOCK_NO_RTC_STARTS);
   }
 

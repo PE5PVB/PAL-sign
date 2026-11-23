@@ -101,6 +101,7 @@ public static class UiText
     public const string PreviewEmptySlot = "empty slot";
     public const string ContestTopLine = "Top line";
     public const string ContestBottomLine = "Bottom line";
+    public const string ContestFrequency = "Frequency";
     public const string ContestNumber = "Number";
 
     public const string UploadPicture = "Upload a picture...";

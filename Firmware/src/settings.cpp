@@ -32,9 +32,16 @@ static bool g924Balken = CFG_G924_CHROMA_BARS;
 static bool tcgAp2 = CFG_TESTCARDG_AP2;
 static bool slideFadeOn = CFG_SLIDE_FADE_ON;
 static bool dstAutoOn = CFG_DST_AUTO_ON;
-static char contestText1[TEXT_MAX];
-static char contestText2[TEXT_MAX];
-static int contestNumber = CFG_CONTEST_NUMBER;
+// The four contest pages: two lines, the frequency line and the
+// number each. Stored in the ContestBlock (pages twelve and thirteen);
+// page 0 is also mirrored into the older fields of SettingsBlock and
+// ExtraBlock, so a record from before the block reads as page 0 and a
+// downgrade keeps what it knew.
+static char contestText1[CONTEST_PAGES][TEXT_MAX];
+static char contestText2[CONTEST_PAGES][TEXT_MAX];
+static char contestText3[CONTEST_PAGES][TEXT_MAX];
+static int contestNumber[CONTEST_PAGES];
+static int contestPage(int page) { return (page >= 0 && page < CONTEST_PAGES) ? page : 0; }
 static int contestScaleText = CFG_CONTEST_SCALE_TEXT;
 static int contestScaleNumber = CFG_CONTEST_SCALE_NUMBER;
 static bool reload = false;
@@ -349,8 +356,10 @@ void cfgSeqText(char *buf, int len) {
 // reorder. Version 8: Crosshatch enters after Multiburst (cardShiftV7).
 // Version 9: the BATC card moves from last to position 10 (cardMoveV8).
 // Version 10: BATC Legacy moves from last to position 11 (cardMoveV9).
+// Version 11: three more contest pages enter right after the first,
+// positions 23 to 25 (cardShiftV10).
 static const uint32_t CARD_MAGIC = 0x44524143;  // "CARD"
-static const uint16_t CARD_VERSION = 10;
+static const uint16_t CARD_VERSION = 11;
 
 // More than there are cards, so adding one does not need a new version.
 static const int CARD_SLOTS = 48;
@@ -536,7 +545,7 @@ int cfgTickerSize() { return cfgCardTickerSize(-1); }
 // seven; the count written is stored, so an older page reads back only
 // as far as it goes.
 static const uint32_t EXTRA_MAGIC = 0x41525458;  // "XTRA"
-static const uint16_t EXTRA_VERSION = 5;
+static const uint16_t EXTRA_VERSION = 6;
 static const int EXTRA_CONTROLS = 16;
 
 struct ExtraBlock {
@@ -557,13 +566,17 @@ struct ExtraBlock {
   char pcmText[PCM_TEXT_MAX];
   // Version 5: BATC Legacy's third line, appended likewise (extraValidV4).
   char legacyText[TEXT_MAX];
+  // Version 6: the contest page's frequency line (extraValidV5).
+  char contestText3[TEXT_MAX];
 };
 static_assert(sizeof(ExtraBlock) <= PAGINA, "the fifth page does not fit in one flash page");
 // An older version wrote sizeof() of its own struct: the fields up to the
 // one added next, padded to the struct's 4-byte alignment.
 static const uint32_t EXTRA_V3_LENGTH = (offsetof(ExtraBlock, pcmText) + 3) & ~3u;
 static const uint32_t EXTRA_V4_LENGTH = (offsetof(ExtraBlock, legacyText) + 3) & ~3u;
-static_assert(EXTRA_V3_LENGTH == 120 && EXTRA_V4_LENGTH == 132, "older extra page sizes");
+static const uint32_t EXTRA_V5_LENGTH = (offsetof(ExtraBlock, contestText3) + 3) & ~3u;
+static_assert(EXTRA_V3_LENGTH == 120 && EXTRA_V4_LENGTH == 132 && EXTRA_V5_LENGTH == 164,
+              "older extra page sizes");
 
 // Defined further down, where the other texts are.
 static void setText(char *target, const char *s);
@@ -588,6 +601,15 @@ static bool extraValid(const ExtraBlock *b) {
   if (b->version != EXTRA_VERSION) return false;
   if (b->length != sizeof(ExtraBlock)) return false;
   return b->crc == extraCrc(b);
+}
+
+// The page as version 5 wrote it: everything up to contestText3.
+static bool extraValidV5(const ExtraBlock *b) {
+  if (b->magic != EXTRA_MAGIC) return false;
+  if (b->version != 5) return false;
+  if (b->length != EXTRA_V5_LENGTH) return false;
+  const uint8_t *p = (const uint8_t *)b + offsetof(ExtraBlock, left);
+  return b->crc == photoCrc32(p, EXTRA_V5_LENGTH - offsetof(ExtraBlock, left), 0xFFFFFFFFu);
 }
 
 // The page as version 4 wrote it: everything up to legacyText.
@@ -618,8 +640,9 @@ static bool extraValidV3(const ExtraBlock *b) {
 // clock's two colours after the cards, versions 1-4 end at the cards;
 // version 6 takes the BATC card's move (cardMoveV8), version 7 BATC
 // Legacy's (cardMoveV9).
+// version 8 the three extra contest pages entering (cardShiftV10).
 static const uint32_t COLOR_MAGIC = 0x524C4F43;  // "COLR"
-static const uint16_t COLOR_VERSION = 7;
+static const uint16_t COLOR_VERSION = 8;
 
 struct CardColors {
   uint8_t rgb[CFG_COLOR_COUNT][3];
@@ -668,6 +691,14 @@ static const ColorBlock *colorInFlash() {
 static bool colorValid(const ColorBlock *b) {
   if (b->magic != COLOR_MAGIC) return false;
   if (b->version != COLOR_VERSION) return false;
+  if (b->length != sizeof(ColorBlock)) return false;
+  return b->crc == colorCrc(b);
+}
+
+// Version 7: today's layout, counted before the extra contest pages.
+static bool colorValidV7(const ColorBlock *b) {
+  if (b->magic != COLOR_MAGIC) return false;
+  if (b->version != 7) return false;
   if (b->length != sizeof(ColorBlock)) return false;
   return b->crc == colorCrc(b);
 }
@@ -752,9 +783,49 @@ static bool teletextValid(const TeletextBlock *b) {
   return b->crc == teletextCrc(b);
 }
 
+// Pages twelve and thirteen: the four contest pages. Their own block,
+// since no other page has room for 400 bytes; a record from before it
+// has these pages blank and reads page 0 from the older fields.
+static const uint32_t CONTEST_MAGIC = 0x53544E43;  // "CNTS"
+static const uint16_t CONTEST_VERSION = 1;
+
+struct ContestPage {
+  char text1[TEXT_MAX];
+  char text2[TEXT_MAX];
+  char text3[TEXT_MAX];
+  uint16_t number;
+  uint8_t spare[2];
+};
+
+struct ContestBlock {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t length;
+  uint32_t crc;   // over everything after this field
+  ContestPage page[CONTEST_PAGES];
+};
+static_assert(sizeof(ContestBlock) <= 2 * PAGINA, "the contest pages do not fit in two flash pages");
+
+static uint32_t contestCrc(const ContestBlock *b) {
+  const uint8_t *p = (const uint8_t *)b + offsetof(ContestBlock, page);
+  uint32_t n = (uint32_t)(sizeof(ContestBlock) - offsetof(ContestBlock, page));
+  return photoCrc32(p, n, 0xFFFFFFFFu);
+}
+
+static const ContestBlock *contestInFlash() {
+  return (const ContestBlock *)(recActive() + 12 * PAGINA);
+}
+
+static bool contestValid(const ContestBlock *b) {
+  if (b->magic != CONTEST_MAGIC) return false;
+  if (b->version != CONTEST_VERSION) return false;
+  if (b->length != sizeof(ContestBlock)) return false;
+  return b->crc == contestCrc(b);
+}
+
 // How many pages a record is. Everything that fills, blanks, programs
 // or carries a record counts with this; the sector has sixteen.
-static const int REC_PAGES = 12;
+static const int REC_PAGES = 14;
 
 // The little panel; applied by display.cpp, which knows how the pin is
 // driven.
@@ -822,9 +893,18 @@ static CardSetting cardSet[CARD_SLOTS];
 // card it is, and working it out here would mean a second copy of that
 // list.
 static uint8_t cardTrait[CARD_SLOTS];
+static int8_t cardContestPage[CARD_SLOTS];
 
 void cfgSetCardTraits(int card, uint8_t t) {
   if (card >= 0 && card < CARD_SLOTS) cardTrait[card] = t;
+}
+
+void cfgSetCardContestPage(int card, int page) {
+  if (card >= 0 && card < CARD_SLOTS) cardContestPage[card] = (int8_t)page;
+}
+
+int cfgCardContestPage(int card) {
+  return (card >= 0 && card < CARD_SLOTS) ? cardContestPage[card] : -1;
 }
 
 uint8_t cfgCardTraits(int card) {
@@ -1171,9 +1251,11 @@ uint32_t cfgCardCrc(int card) {
     crc = photoCrc32((const uint8_t *)textSub, TEXT_MAX, crc);
   }
   if (cardTrait[i] & CARD_TRAIT_CONTEST) {
-    crc = photoCrc32((const uint8_t *)contestText1, TEXT_MAX, crc);
-    crc = photoCrc32((const uint8_t *)contestText2, TEXT_MAX, crc);
-    const uint8_t nr[2] = {(uint8_t)contestNumber, (uint8_t)(contestNumber >> 8)};
+    const int pg = contestPage(cardContestPage[i]);
+    crc = photoCrc32((const uint8_t *)contestText1[pg], TEXT_MAX, crc);
+    crc = photoCrc32((const uint8_t *)contestText2[pg], TEXT_MAX, crc);
+    crc = photoCrc32((const uint8_t *)contestText3[pg], TEXT_MAX, crc);
+    const uint8_t nr[2] = {(uint8_t)contestNumber[pg], (uint8_t)(contestNumber[pg] >> 8)};
     crc = photoCrc32(nr, sizeof(nr), crc);
   }
   if (cardSet[i].insert == INSERT_TEXT) {
@@ -1290,6 +1372,15 @@ static bool cardValidV7(const CardBlock *b) {
   return b->crc == cardCrc(b);
 }
 
+// A version 10 block: today's records, counted before the three extra
+// contest pages entered.
+static bool cardValidV10(const CardBlock *b) {
+  if (b->magic != CARD_MAGIC) return false;
+  if (b->version != 10) return false;
+  if (b->length != sizeof(CardBlock)) return false;
+  return b->crc == cardCrc(b);
+}
+
 // A version 9 block: today's records, counted before BATC Legacy moved.
 static bool cardValidV9(const CardBlock *b) {
   if (b->magic != CARD_MAGIC) return false;
@@ -1346,8 +1437,23 @@ static uint8_t cardMoveV9(uint8_t i) {
   return (i >= LEGACY_NEW && i < LEGACY_OLD) ? (uint8_t)(i + 1) : i;
 }
 
+// Old (version 10) position to new (version 11) position, for the
+// three extra contest pages entering right after the first one at
+// position 21: the cards from 22 up move three up. A permutation of
+// the 48 slots, the three unused slots at the end come round to the
+// new positions, so no index runs past the last one.
+static const int CONTEST_NEW = 22, CONTEST_EXTRA = 3;
+static uint8_t cardShiftV10(uint8_t i) {
+  if (i < CONTEST_NEW) return i;
+  if (i + CONTEST_EXTRA < CARD_SLOTS) return (uint8_t)(i + CONTEST_EXTRA);
+  return (uint8_t)(CONTEST_NEW + (i + CONTEST_EXTRA - CARD_SLOTS));
+}
+
+// A version 9 position to today's.
+static uint8_t cardUpV9(uint8_t i) { return cardShiftV10(cardMoveV9(i)); }
+
 // A version 8 position to today's.
-static uint8_t cardUpV8(uint8_t i) { return cardMoveV9(cardMoveV8(i)); }
+static uint8_t cardUpV8(uint8_t i) { return cardShiftV10(cardMoveV9(cardMoveV8(i))); }
 
 // The speed a record from before the speed byte gets: walking left at
 // the pace the band always had, rung 4 of the ladder.
@@ -1493,11 +1599,15 @@ static void zetFabriek() {
   pcmText[PCM_TEXT_MAX - 1] = 0;
   strncpy(legacyText, CFG_LEGACY_TEXT, TEXT_MAX - 1);
   legacyText[TEXT_MAX - 1] = 0;
-  strncpy(contestText1, CFG_CONTEST_TEXT1, TEXT_MAX - 1);
-  strncpy(contestText2, CFG_CONTEST_TEXT2, TEXT_MAX - 1);
-  contestText1[TEXT_MAX - 1] = 0;
-  contestText2[TEXT_MAX - 1] = 0;
-  contestNumber = CFG_CONTEST_NUMBER;
+  for (int p = 0; p < CONTEST_PAGES; p++) {
+    strncpy(contestText1[p], CFG_CONTEST_TEXT1, TEXT_MAX - 1);
+    strncpy(contestText2[p], CFG_CONTEST_TEXT2, TEXT_MAX - 1);
+    strncpy(contestText3[p], CFG_CONTEST_TEXT3, TEXT_MAX - 1);
+    contestText1[p][TEXT_MAX - 1] = 0;
+    contestText2[p][TEXT_MAX - 1] = 0;
+    contestText3[p][TEXT_MAX - 1] = 0;
+    contestNumber[p] = CFG_CONTEST_NUMBER;
+  }
   contestScaleText = CFG_CONTEST_SCALE_TEXT;
   contestScaleNumber = CFG_CONTEST_SCALE_NUMBER;
   startPattern = CFG_PATTERN;
@@ -1539,11 +1649,11 @@ void cfgInit() {
   g924Balken = b->g924Balken != 0;
   tcgAp2 = b->tcgAp2 != 0;
   if (b->insertMode < INSERT_COUNT) insertMode = b->insertMode;
-  memcpy(contestText1, b->contestText1, TEXT_MAX);
-  memcpy(contestText2, b->contestText2, TEXT_MAX);
-  contestText1[TEXT_MAX - 1] = 0;
-  contestText2[TEXT_MAX - 1] = 0;
-  if (b->contestNumber <= CONTEST_NUMBER_MAX) contestNumber = b->contestNumber;
+  memcpy(contestText1[0], b->contestText1, TEXT_MAX);
+  memcpy(contestText2[0], b->contestText2, TEXT_MAX);
+  contestText1[0][TEXT_MAX - 1] = 0;
+  contestText2[0][TEXT_MAX - 1] = 0;
+  if (b->contestNumber <= CONTEST_NUMBER_MAX) contestNumber[0] = b->contestNumber;
   if (b->contestScaleText >= 1) contestScaleText = b->contestScaleText;
   if (b->contestScaleNumber >= 1) contestScaleNumber = b->contestScaleNumber;
   // No upper bound here: this file does not know how many cards there
@@ -1557,9 +1667,12 @@ void cfgInit() {
   const CardBlockV6 *c6 = (const CardBlockV6 *)c;
   if (cardValid(c)) {
     memcpy(cardSet, c->card, sizeof(cardSet));
+  } else if (cardValidV10(c)) {
+    // Today's records, only the extra contest pages' shift to take.
+    for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardShiftV10((uint8_t)i)] = c->card[i];
   } else if (cardValidV9(c)) {
-    // Today's records, only BATC Legacy's move to take.
-    for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardMoveV9((uint8_t)i)] = c->card[i];
+    // Today's records, BATC Legacy's move and the shift to take.
+    for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardUpV9((uint8_t)i)] = c->card[i];
   } else if (cardValidV8(c)) {
     // Today's records, the BATC card's and BATC Legacy's moves to take.
     for (int i = 0; i < CARD_SLOTS; i++) cardSet[cardUpV8((uint8_t)i)] = c->card[i];
@@ -1610,11 +1723,15 @@ void cfgInit() {
   // the same maps the card block above took: version 2 or nothing takes
   // all four; 3 and 4 take the shift plus the two newest; 5 takes the
   // two newest; 6 and 7 take cardShiftV7; every version before 9 then
-  // takes cardMoveV8, and every version before 10 cardMoveV9. Zero maps
-  // to zero, so a factory fresh flash is unaffected.
-  if (cardValidV9(c)) {
-    startPattern = cardMoveV9((uint8_t)startPattern);
-    for (int i = 0; i < seqCount; i++) seqCard[i] = cardMoveV9(seqCard[i]);
+  // takes cardMoveV8, every version before 10 cardMoveV9, and every
+  // version before 11 cardShiftV10. Zero maps to zero, so a factory
+  // fresh flash is unaffected.
+  if (cardValidV10(c)) {
+    startPattern = cardShiftV10((uint8_t)startPattern);
+    for (int i = 0; i < seqCount; i++) seqCard[i] = cardShiftV10(seqCard[i]);
+  } else if (cardValidV9(c)) {
+    startPattern = cardUpV9((uint8_t)startPattern);
+    for (int i = 0; i < seqCount; i++) seqCard[i] = cardUpV9(seqCard[i]);
   } else if (!cardValid(c)) {
     if (!cardValidV8(c)) {
     if (!cardValidV7(c) && !cardValidV6(c6)) {
@@ -1656,9 +1773,13 @@ void cfgInit() {
   if (colorValid(cb)) {
     memcpy(colorSet, cb->card, sizeof(colorSet));
     memcpy(clockColors, cb->clock, sizeof(clockColors));
+  } else if (colorValidV7(cb)) {
+    // From before the extra contest pages entered.
+    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardShiftV10((uint8_t)i)] = cb->card[i];
+    memcpy(clockColors, cb->clock, sizeof(clockColors));
   } else if (colorValidV6(cb)) {
     // From before BATC Legacy moved.
-    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardMoveV9((uint8_t)i)] = cb->card[i];
+    for (int i = 0; i < CARD_SLOTS; i++) colorSet[cardUpV9((uint8_t)i)] = cb->card[i];
     memcpy(clockColors, cb->clock, sizeof(clockColors));
   } else if (colorValidV5(cb)) {
     // From before the BATC card moved: the colours belong to card
@@ -1705,14 +1826,32 @@ void cfgInit() {
 
   const ExtraBlock *xb = extraInFlash();
   if (extraValid(xb)) {
+    memcpy(contestText3[0], xb->contestText3, TEXT_MAX);
+    contestText3[0][TEXT_MAX - 1] = 0;
+  }
+  // The contest block, over the page 0 mirror read above: when the
+  // record has one, all four pages come from here.
+  const ContestBlock *ct = contestInFlash();
+  if (contestValid(ct)) {
+    for (int p = 0; p < CONTEST_PAGES; p++) {
+      memcpy(contestText1[p], ct->page[p].text1, TEXT_MAX);
+      memcpy(contestText2[p], ct->page[p].text2, TEXT_MAX);
+      memcpy(contestText3[p], ct->page[p].text3, TEXT_MAX);
+      contestText1[p][TEXT_MAX - 1] = 0;
+      contestText2[p][TEXT_MAX - 1] = 0;
+      contestText3[p][TEXT_MAX - 1] = 0;
+      if (ct->page[p].number <= CONTEST_NUMBER_MAX) contestNumber[p] = ct->page[p].number;
+    }
+  }
+  if (extraValid(xb) || extraValidV5(xb)) {
     memcpy(legacyText, xb->legacyText, TEXT_MAX);
     legacyText[TEXT_MAX - 1] = 0;
   }
-  if (extraValid(xb) || extraValidV4(xb)) {
+  if (extraValid(xb) || extraValidV5(xb) || extraValidV4(xb)) {
     memcpy(pcmText, xb->pcmText, PCM_TEXT_MAX);
     pcmText[PCM_TEXT_MAX - 1] = 0;
   }
-  if (extraValid(xb) || extraValidV4(xb) || extraValidV3(xb)) {
+  if (extraValid(xb) || extraValidV5(xb) || extraValidV4(xb) || extraValidV3(xb)) {
     memcpy(insertLeft, xb->left, TEXT_MAX);
     memcpy(insertRight, xb->right, TEXT_MAX);
     insertLeft[TEXT_MAX - 1] = 0;
@@ -1774,9 +1913,9 @@ static void fillPages(uint8_t *page) {
   b.g924Balken = g924Balken ? 1 : 0;
   b.tcgAp2 = tcgAp2 ? 1 : 0;
   b.insertMode = (uint8_t)insertMode;
-  memcpy(b.contestText1, contestText1, TEXT_MAX);
-  memcpy(b.contestText2, contestText2, TEXT_MAX);
-  b.contestNumber = (uint16_t)contestNumber;
+  memcpy(b.contestText1, contestText1[0], TEXT_MAX);
+  memcpy(b.contestText2, contestText2[0], TEXT_MAX);
+  b.contestNumber = (uint16_t)contestNumber[0];
   b.contestScaleText = (uint8_t)contestScaleText;
   b.contestScaleNumber = (uint8_t)contestScaleNumber;
   b.startPattern = (uint8_t)(startPattern | (slideshowSaved ? 0x80 : 0));
@@ -1835,10 +1974,15 @@ static void fillPages(uint8_t *page) {
   xb.spare[0] = slideFadeOn ? 0 : 1;   // see the note at cfgInit()'s own read of it
   memcpy(xb.pcmText, pcmText, PCM_TEXT_MAX);
   memcpy(xb.legacyText, legacyText, TEXT_MAX);
+  memcpy(xb.contestText3, contestText3[0], TEXT_MAX);
   xb.spare[1] = dstAutoOn ? 1 : 0;     // see the note at cfgInit()'s own read of it
   xb.crc = extraCrc(&xb);
 
-  ColorBlock col;
+  // The three biggest blocks are built in the page buffer itself, not
+  // as locals: together they are 1.8 kB and the core0 stack did not
+  // carry that next to the rest of this frame.
+  memset(page, 0xFF, REC_PAGES * PAGINA);
+  ColorBlock &col = *(ColorBlock *)(page + 6 * PAGINA);
   memset(&col, 0, sizeof(col));
   col.magic = COLOR_MAGIC;
   col.version = COLOR_VERSION;
@@ -1847,7 +1991,7 @@ static void fillPages(uint8_t *page) {
   memcpy(col.clock, clockColors, sizeof(col.clock));
   col.crc = colorCrc(&col);
 
-  TeletextBlock tt;
+  TeletextBlock &tt = *(TeletextBlock *)(page + 9 * PAGINA);
   memset(&tt, 0, sizeof(tt));
   tt.magic = TELETEXT_MAGIC;
   tt.version = TELETEXT_VERSION;
@@ -1855,14 +1999,24 @@ static void fillPages(uint8_t *page) {
   memcpy(tt.row, teletextRows, sizeof(tt.row));
   tt.crc = teletextCrc(&tt);
 
-  memset(page, 0xFF, REC_PAGES * PAGINA);
+  ContestBlock &ct = *(ContestBlock *)(page + 12 * PAGINA);
+  memset(&ct, 0, sizeof(ct));
+  ct.magic = CONTEST_MAGIC;
+  ct.version = CONTEST_VERSION;
+  ct.length = sizeof(ct);
+  for (int p = 0; p < CONTEST_PAGES; p++) {
+    memcpy(ct.page[p].text1, contestText1[p], TEXT_MAX);
+    memcpy(ct.page[p].text2, contestText2[p], TEXT_MAX);
+    memcpy(ct.page[p].text3, contestText3[p], TEXT_MAX);
+    ct.page[p].number = (uint16_t)contestNumber[p];
+  }
+  ct.crc = contestCrc(&ct);
+
   memcpy(page, &b, sizeof(b));
   memcpy(page + PAGINA, &q, sizeof(q));
   memcpy(page + 2 * PAGINA, &c, sizeof(c));
   memcpy(page + 4 * PAGINA, &tk, sizeof(tk));
   memcpy(page + 5 * PAGINA, &xb, sizeof(xb));
-  memcpy(page + 6 * PAGINA, &col, sizeof(col));
-  memcpy(page + 9 * PAGINA, &tt, sizeof(tt));
 }
 
 // Did the last save have to erase after all? For the report: a save
@@ -1932,7 +2086,8 @@ static bool writePages(uint8_t *page) {
   recNewest = target;
   if (!blockValid(blockInFlash()) || !seqValid(seqInFlash()) || !cardValid(cardInFlash()) ||
       !tickValid(tickInFlash()) || !extraValid(extraInFlash()) ||
-      !colorValid(colorInFlash()) || !teletextValid(teletextInFlash())) {
+      !colorValid(colorInFlash()) || !teletextValid(teletextInFlash()) ||
+      !contestValid(contestInFlash())) {
     recNewest = wasNewest;
     // The half record must not win recScan() at the next boot: the
     // boot scan validates only the main block, so a record whose
@@ -1981,7 +2136,7 @@ void cfgJournalMaintenance() {
   if (erased) Serial.printf(LANG_STORAGE_JOURNAL_D_OF_D, erased, n);
 }
 
-static uint8_t pageBuf[REC_PAGES * PAGINA];
+static uint8_t pageBuf[REC_PAGES * PAGINA] __attribute__((aligned(4)));
 
 bool cfgSave() {
   if (!dirty && !cardDirty) return true;
@@ -2030,6 +2185,8 @@ bool cfgSaveCard() {
     memcpy(pageBuf + 6 * PAGINA, inFlash + 6 * PAGINA, 3 * PAGINA);
   if (teletextValid(teletextInFlash()))
     memcpy(pageBuf + 9 * PAGINA, inFlash + 9 * PAGINA, 3 * PAGINA);
+  if (contestValid(contestInFlash()))
+    memcpy(pageBuf + 12 * PAGINA, inFlash + 12 * PAGINA, 2 * PAGINA);
 
   SettingsBlock *b = (SettingsBlock *)pageBuf;
   b->startPattern = (uint8_t)(startPattern | (slideshowSaved ? 0x80 : 0));
@@ -2130,20 +2287,31 @@ void insertSetMode(int m) {
   reload = true;
 }
 
-const char *cfgContestText1() { return contestText1; }
-const char *cfgContestText2() { return contestText2; }
-int cfgContestNumber() { return contestNumber; }
+const char *cfgContestText1(int page) { return contestText1[contestPage(page)]; }
+const char *cfgContestText2(int page) { return contestText2[contestPage(page)]; }
+const char *cfgContestText3(int page) { return contestText3[contestPage(page)]; }
+int cfgContestNumber(int page) { return contestNumber[contestPage(page)]; }
 int cfgContestScaleText() { return contestScaleText; }
 int cfgContestScaleNumber() { return contestScaleNumber; }
 
-void cfgSetContestText1(const char *s) { setText(contestText1, s); }
-void cfgSetContestText2(const char *s) { setText(contestText2, s); }
+static bool contestPageOk(int page) { return page >= 0 && page < CONTEST_PAGES; }
 
-void cfgSetContestNumber(int v) {
+void cfgSetContestText1(int page, const char *s) {
+  if (contestPageOk(page)) setText(contestText1[page], s);
+}
+void cfgSetContestText2(int page, const char *s) {
+  if (contestPageOk(page)) setText(contestText2[page], s);
+}
+void cfgSetContestText3(int page, const char *s) {
+  if (contestPageOk(page)) setText(contestText3[page], s);
+}
+
+void cfgSetContestNumber(int page, int v) {
+  if (!contestPageOk(page)) return;
   if (v < 0) v = 0;
   if (v > CONTEST_NUMBER_MAX) v = CONTEST_NUMBER_MAX;
-  if (v == contestNumber) return;
-  contestNumber = v;
+  if (v == contestNumber[page]) return;
+  contestNumber[page] = v;
   reload = true;
   dirty = true;
 }

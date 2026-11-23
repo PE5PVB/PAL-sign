@@ -57,6 +57,10 @@ public class CardInfo
     // built-in photo. See PortraitDialog.cs.
     public bool CustomPhoto;
 
+    // Own == 3 only: which of the four contest pages this card shows,
+    // 1 based as the board sends it; 0 on every other card.
+    public int ContestPage;
+
     // The card's own switches as a bit field, meaning per Own: for the
     // Sony PCM card (Own == 5) bit 0 is 16 bit, bit 1 pre-emphasis; for
     // the TV clock (Own == 7) bit 0 puts the text at the bottom right.
@@ -115,7 +119,12 @@ public class ControlInfo
 public class BoardSettings
 {
     public string TextId = "", TextSub = "", TickerText = "";
-    public string Contest1 = "", Contest2 = "";
+    // The four contest pages, 0 based here, 1 based on the wire
+    // (contest1.<page>); Contest3 is the frequency line.
+    public const int ContestPages = 4;
+    public string[] Contest1 = Blank(), Contest2 = Blank(), Contest3 = Blank();
+    public int[] ContestNr = new int[ContestPages];
+    private static string[] Blank() { var a = new string[ContestPages]; Array.Fill(a, ""); return a; }
     public string PcmText = "";   // the Ham PCM text channel, 10 characters
     public string LegacyText = "";   // BATC Legacy's third line
     // The board's firmware version (CFG_VERSION); empty from a firmware
@@ -160,7 +169,7 @@ public class BoardSettings
         foreach (char ch in row) sb.Append(((int)ch & 0x7F).ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
         return sb.ToString();
     }
-    public int ContestNr, Luma, Chroma, CurrentCard;
+    public int Luma, Chroma, CurrentCard;
 
     // Kept in flash beside the card, so a running show resumes by itself
     // after a power cut.
@@ -187,7 +196,7 @@ public static class BoardConfig
 {
     // Protocol shape this tool speaks. Bump together with the matching
     // number in the firmware's printSettings().
-    public const int Speaks = 26;
+    public const int Speaks = 27;
 
     /// <summary>Opens the port the way the board needs it. DTR must be on;
     /// see BoardUpload.Send().</summary>
@@ -274,6 +283,10 @@ public static class BoardConfig
             return;
         }
 
+        // contest1.<page> .. contestnr.<page>, 1 based, one of the four
+        // contest pages.
+        if (TakeContest(s, name, value, num)) return;
+
         // The count lines (cards, aspects, inserts, fonts, slots) are not
         // taken up: each count follows from the length of the list itself.
         switch (name)
@@ -281,14 +294,11 @@ public static class BoardConfig
             case "textid": s.TextId = value; break;
             case "textsub": s.TextSub = value; break;
             case "tickertext": s.TickerText = value; break;
-            case "contest1": s.Contest1 = value; break;
-            case "contest2": s.Contest2 = value; break;
             case "pcmtext": s.PcmText = value; break;
             case "legacytext": s.LegacyText = value; break;
             case "version": s.Firmware = value; break;
             case "insertleft": s.InsertLeft = value; break;
             case "insertright": s.InsertRight = value; break;
-            case "contestnr": s.ContestNr = num; break;
             case "teletext": s.Teletext = num != 0; break;
             case "its": s.Its = num != 0; break;
             case "vbi": s.Vbi = num != 0; break;
@@ -382,6 +392,7 @@ public static class BoardConfig
                 case "hasbox": c.HasBox = v; break;
                 case "moving": c.Moving = v != 0; break;
                 case "customphoto": c.CustomPhoto = v != 0; break;
+                case "contestpage": c.ContestPage = v; break;
                 case "option": c.Option = v; break;
                 case "hasline": c.HasLine = v; break;
                 case "enabled": c.Enabled = v != 0; break;
@@ -407,6 +418,25 @@ public static class BoardConfig
 
     private static int Number(string s) =>
         int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : 0;
+
+    private static bool TakeContest(BoardSettings s, string name, string value, int num)
+    {
+        int dot = name.IndexOf('.');
+        if (dot <= 0) return false;
+        string key = name[..dot];
+        if (key != "contest1" && key != "contest2" && key != "contest3" && key != "contestnr")
+            return false;
+        if (!int.TryParse(name.AsSpan(dot + 1), out int page) ||
+            page < 1 || page > BoardSettings.ContestPages) return true;
+        switch (key)
+        {
+            case "contest1": s.Contest1[page - 1] = value; break;
+            case "contest2": s.Contest2[page - 1] = value; break;
+            case "contest3": s.Contest3[page - 1] = value; break;
+            case "contestnr": s.ContestNr[page - 1] = num; break;
+        }
+        return true;
+    }
 
     /// <summary>Sets one thing. Costs nothing on the board; it is not in
     /// flash until Save().</summary>

@@ -153,6 +153,7 @@ public partial class CardsTab : TabPage
     // The contest page only; one setting each on the board.
     private readonly TextBox _contest1 = new() { Width = 185, MaxLength = 31 };
     private readonly TextBox _contest2 = new() { Width = 185, MaxLength = 31 };
+    private readonly TextBox _contest3 = new() { Width = 185, MaxLength = 31 };
     private readonly FixedDigits _contestNr = new()
         { Minimum = 0, Maximum = 9999, Width = 80 };
     private readonly TableLayoutPanel _contest = new()
@@ -372,11 +373,15 @@ public partial class CardsTab : TabPage
         // Contest lines take only what the board's faces can draw; see BoardText.
         BoardText.Guard(_contest1);
         BoardText.Guard(_contest2);
-        SendOnLeave(_contest1, "contest1");
-        SendOnLeave(_contest2, "contest2");
-        SendOnLeave(_pcmText, "pcmtext");
+        BoardText.Guard(_contest3);
+        // The contest fields belong to the page the shown card is, so
+        // the wire name is made when the box is left, not when it is wired.
+        SendOnLeave(_contest1, () => ContestName("contest1"));
+        SendOnLeave(_contest2, () => ContestName("contest2"));
+        SendOnLeave(_contest3, () => ContestName("contest3"));
+        SendOnLeave(_pcmText, () => "pcmtext");
         BoardText.Guard(_legacyText);
-        SendOnLeave(_legacyText, "legacytext");
+        SendOnLeave(_legacyText, () => "legacytext");
         _why.SetToolTip(_legacyText, UiText.TipLegacyText);
         _why.SetToolTip(_pcmText, UiText.TipPcmText);
         _why.SetToolTip(_hamQuality, UiText.TipHamQuality);
@@ -396,7 +401,7 @@ public partial class CardsTab : TabPage
         WireSwatch(_colSub, "subcolor", UiText.TipSubColor);
         WireSwatch(_colIns, "inscolor", UiText.TipInsColor);
         _contestNr.ValueChanged += (_, __) =>
-            PushShared("contestnr", (int)_contestNr.Value);
+            PushShared(ContestName("contestnr"), (int)_contestNr.Value);
 
         _y.ValueChanged += (_, __) =>
         {

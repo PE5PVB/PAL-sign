@@ -81,15 +81,34 @@ public partial class CardsTab
         if (_loading || _cfg == null) return;
         if (name == "g924bars") _cfg.G924Bars = value != 0;
         if (name == "tcgap2") _cfg.TcgAp2 = value != 0;
-        if (name == "contestnr") _cfg.ContestNr = value;
+        int cp = ContestPageOf(name);
+        if (cp >= 0 && name.StartsWith("contestnr.", StringComparison.Ordinal)) _cfg.ContestNr[cp] = value;
         _pending[name] = value.ToString();
+    }
+
+    // "contest1.<page>" and its three siblings: the page the shown card
+    // is, 1 based on the wire.
+    private string ContestName(string field) =>
+        $"{field}.{Math.Clamp(Current?.ContestPage ?? 1, 1, BoardSettings.ContestPages)}";
+
+    private static int ContestPageOf(string name)
+    {
+        int dot = name.IndexOf('.');
+        if (dot <= 0 || !name.StartsWith("contest", StringComparison.Ordinal)) return -1;
+        return int.TryParse(name.AsSpan(dot + 1), out int p) && p >= 1 && p <= BoardSettings.ContestPages
+            ? p - 1 : -1;
     }
 
     private void PushShared(string name, string value)
     {
         if (_loading || _cfg == null) return;
-        if (name == "contest1") _cfg.Contest1 = value;
-        if (name == "contest2") _cfg.Contest2 = value;
+        int cp = ContestPageOf(name);
+        if (cp >= 0)
+        {
+            if (name.StartsWith("contest1.", StringComparison.Ordinal)) _cfg.Contest1[cp] = value;
+            if (name.StartsWith("contest2.", StringComparison.Ordinal)) _cfg.Contest2[cp] = value;
+            if (name.StartsWith("contest3.", StringComparison.Ordinal)) _cfg.Contest3[cp] = value;
+        }
         if (name == "pcmtext") _cfg.PcmText = value;
         if (name == "legacytext") _cfg.LegacyText = value;
         _pending[name] = value;
@@ -97,14 +116,14 @@ public partial class CardsTab
 
     // Only when it really changed: sending an unchanged text would still
     // make the board rebuild the card. Last sent value kept in Tag.
-    private void SendOnLeave(TextBox box, string name)
+    private void SendOnLeave(TextBox box, Func<string> name)
     {
         void Send()
         {
             if (_loading) return;
             if (box.Tag as string == box.Text) return;
             box.Tag = box.Text;
-            PushShared(name, box.Text);
+            PushShared(name(), box.Text);
         }
         box.Leave += (_, __) => Send();
         box.KeyDown += (_, e) =>
