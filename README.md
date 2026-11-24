@@ -5,6 +5,8 @@ Advanced CVBS PAL test card generator, built around an RP2350 and an ADV7391 vid
 
 A standalone hardware test card generator for anyone working with analogue television: an ATV contest, aligning a transmitter or receiver, or just needing a proper PAL B/G composite signal on the bench. Twenty-six built-in test cards, generated in real time and sent out as CVBS, no PC required to run it.
 
+<p align="center"><img src="images/pal-sign-board.png" width="420" alt="The assembled PAL-sign board"><br><i>The assembled board: three buffered composite video outputs on BNC, each with its own 75 ohm driver, USB-C and a DC jack, the ML2032 backup cell of the real-time clock, and the headers for the front panel and the PCM1808 ADC.</i></p>
+
 ## Features
 - Twenty-six built-in test cards: PM5644 (4:3 and 16:9) and the monochrome PM5644 Indian Head monoscope, BBC Cards F/G/W, FuBK (full, simple and 16:9), EBU colour bars and black & white, the ADV7391's own internal colour bars, Crosshatch, Multiburst, Pulse & Bar, sin(x)/x, Mixed bars, Picdream, a BATC card and the BATC Legacy card of the BBC Micro era, four ATV Contest pages with callsign, contest number, locator and frequency, a TVE card and an analogue TV clock
 - Fourteen Custom slots for your own pictures, uploaded from the PC tool
@@ -142,8 +144,9 @@ Plus supply and GND for the ADC board. The PCM1808's mode pins go high for maste
 ## Repository layout
 - `Firmware/` -- the firmware for the RP2350, built with PlatformIO or the Arduino IDE
 - `PC Software/` -- the Windows configurator and the PCM decoder, see [the configurator's README](PC%20Software/Configurator/README.md) for how to build it
-- `Hardware/Kicad/` -- the PCB design
+- `Hardware/RV-3028-C7 version/` -- the KiCad project of the board, with the schematic as PDF and the fabrication output (Gerbers, BOM, positions)
 - `Hardware/RV-3032-C7 version/` -- the same board with the RV-3032-C7 as its real-time clock, for when the RV-3028-C7 is hard to get
+- `Hardware/Gerbers/` -- the fabrication output of the RV-3028-C7 board on its own
 
 ## Building the firmware
 ```
