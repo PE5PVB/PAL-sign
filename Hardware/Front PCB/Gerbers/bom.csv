@@ -1,0 +1,6 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+"C1, C2, C3, C4",0603,4,100n,
+J1,PinHeader_2x06_P2.54mm_Vertical,1,CONNECTOR,
+"R1, R2, R3",0603,3,4k7,
+SW1,RotaryEncoder_Alps_EC11E-Switch_Vertical_H20mm,1,RotaryEncoder_Switch,
+U1,2.25-inch 76_284 TFT LCD,1,Display,
